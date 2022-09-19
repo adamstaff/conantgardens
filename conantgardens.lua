@@ -7,20 +7,27 @@
 -- James Dewitt Yancey
 --
 -- E1: Select Track
--- E2: Select Position
--- E3: Select Division
---
 -- K1: Hold for shift
--- K2: Change page
+-- K2: Toggle page
+--
+-- In Sequence View:
+-- E2: Select position
+-- E3: Select division
 -- K3: Add / remove notes
--- - Hold K3 to move notes
---
--- shift+E1:
--- shift+E2: track timing
--- shift+E3: note dynamic
---
+-- -- Hold K3 to move notes
+-- shift+E1: 
+-- shift+E2: Track timing
+-- shift+E3: Note dynamic
 -- shift+K2:
--- shift+K3:
+-- shift+K3: Fill notes
+--
+-- In Sample View
+-- E2: Sample start
+-- E3: Sample end
+-- K3: Load sample
+-- shift+E1:
+-- shift+E2: Start+end
+-- shift+E3: Sample volume
 
 util = require "util"
 fileselect = require "fileselect"
