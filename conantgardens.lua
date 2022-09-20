@@ -54,6 +54,7 @@ function init ()
   -- offset for entire track +- in 192ths
   trackTiming = {0,0,0,0}
   sampleView = false
+  softcut.event_render(copy_samples)
 	waveformSamples = {}
   
   --add a samples
@@ -128,10 +129,16 @@ function ticker()
   end
 end
 
+function copy_samples (ch, start, interval_per_sample, samples)
+  print("copying samples, like " .. samples[1])
+  waveformSamples[currentTrack] = samples
+end
+
 function load_file(file) 
   if file ~= "cancel" then
     softcut.buffer_read_mono(file,0,currentTrack,-1,1,1)
-    print("loaded " .. file .. " into track " .. currentTrack)
+    print("loaded " .. file .. " into track " .. currentTrack + 1)
+    softcut.render_buffer(currentTrack,0,1,editArea.width)
   end
 end
 
@@ -239,18 +246,24 @@ function drawSequencer()
 end
 
 function drawSampler()
+	--background
+	screen.level(1)
+	screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
+	screen.fill()
+	--waveform
+	screen.level(15)
+	if waveformSamples[1] ~= nil then
+  	for i=0, 1, editArea.width do
+	    screen.pixel(i + 4, util.round((waveformSamples[currentTrack][i] * editArea.height + 4), 1))
+	  end
+	end
+	screen.fill()
+	
 	-- text labels
   screen.level(15)
 	--track label
   screen.move(107,5)
   screen.text("trk " .. currentTrack + 1)
-	
-	--draw waveform
-	local wfWidth = 100
-	local wfHeight = 50
-	screen.level(1)
-	screen.rect(4, 4, wfWidth, wfHeight)
-	screen.fill()
 end
 
 function redraw()
