@@ -54,6 +54,7 @@ function init ()
   -- offset for entire track +- in 192ths
   trackTiming = {0,0,0,0}
   sampleView = false
+	waveformSamples = {}
   
   --add a samples
   file = {}
@@ -119,7 +120,7 @@ function ticker()
     end
     --limit redraw
     --change this to not be tied to tempo!
-    if (math.floor(clockPosition % 24) == 0) then redraw() end
+    if (math.floor(clockPosition % 24) == 0 and isPlaying and not sampleView) then redraw() end
     --tick
     clockPosition = clockPosition + tick
     --wait
@@ -127,8 +128,11 @@ function ticker()
   end
 end
 
-function callback(file) 
-  print(file)  
+function load_file(file) 
+  if file ~= "cancel" then
+    softcut.buffer_read_mono(file,0,currentTrack,-1,1,1)
+    print("loaded " .. file .. " into track " .. currentTrack)
+  end
 end
 
 function drawEvents()
@@ -206,17 +210,6 @@ function drawSequencer()
   end
   screen.fill()
   
-  --a play/stop icon, to visualise play state
-  screen.level(10)
-  if (isPlaying == true) then
-    screen.move(0,60)
-    screen.line(0,64)
-    screen.line(4,62)
-    screen.close()
-    else screen.rect(0,60,4,4)
-  end
-  screen.fill()
-  
   -- text labels
   --what track
   screen.move(107,5)
@@ -246,9 +239,18 @@ function drawSequencer()
 end
 
 function drawSampler()
+	-- text labels
   screen.level(15)
+	--track label
   screen.move(107,5)
   screen.text("trk " .. currentTrack + 1)
+	
+	--draw waveform
+	local wfWidth = 100
+	local wfHeight = 50
+	screen.level(1)
+	screen.rect(4, 4, wfWidth, wfHeight)
+	screen.fill()
 end
 
 function redraw()
@@ -256,6 +258,17 @@ function redraw()
   
   if sampleView then drawSampler()
   else drawSequencer() end
+  
+  --a play/stop icon, to visualise play state
+  screen.level(10)
+  if (isPlaying == true) then
+    screen.move(0,60)
+    screen.line(0,64)
+    screen.line(4,62)
+    screen.close()
+    else screen.rect(0,60,4,4)
+  end
+  screen.fill()
 
   screen.update()
 end
@@ -340,12 +353,16 @@ function enc(e, d)
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
   end
   
-  redraw()
+  if not isPlaying then
+    redraw()
+	end
 end
 
 function key(k, z)
   
   heldKeys[k] = z == 1
+  
+  -- holding k3 to move events
   if (k == 3 and z == 1 and not sampleView) then
     nowPosition[1] = beatCursor
     nowPosition[2] = currentTrack
@@ -362,6 +379,12 @@ function key(k, z)
     end
   else if (k == 2 and z == 0) then sampleView = not sampleView end
   end
+
+  -- load sample
+	if sampleView and k == 3 and z == 0 then
+	  print("loading a file")
+		fileselect.enter(_path.audio,load_file)
+	end
   
   --add and remove events
   if (k == 3 and z == 0 and nowPosition[1] == beatCursor and nowPosition[2] == currentTrack and not sampleView) then
@@ -387,10 +410,6 @@ function key(k, z)
       table.insert(trackEvents, {position, length, track, currentDynamic}) 
     end
     weMoving = false
-  end
-  
-  if (k == 3 and z == 0 and sampleView) then
-    fs.enter(dust, callback)
   end
 
   redraw()
