@@ -129,9 +129,6 @@ function init()
   for i=0,3,1 do
     currentTrack = i
     softcut.render_buffer(1,i,1,editArea.width)
-    while waveform.samples[i][1] == nil do
-      clock.sync(1/10)
-    end
   end
   currentTrack = 0
 
@@ -267,13 +264,17 @@ function drawSampler()
 	  print("new render")
 	  softcut.render_buffer(1,currentTrack,1,editArea.width)
 	end
-	if waveform.isLoaded then
+  if waveform.samples[currentTrack] == nil then
+    screen.move(32,32)
+    screen.text("loading")
+    screen.update() end
+	if waveform.isLoaded and waveform.samples[currentTrack] ~= nil then
   	for i=1, editArea.width, 1 do
   	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack][i] * editArea.height * 0.5)
 	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack][i] * editArea.height * -0.5)
 	    screen.stroke()
-	  end
-	else 
+  	end
+	else
 	   screen.move(10,32)
 	   screen.text("no file loaded")
 	   screen.move(20,62)
