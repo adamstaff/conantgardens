@@ -96,8 +96,11 @@ function init()
   waveform = {}
   waveform.isLoaded = {false, false, false, false}
   waveform.samples = {}
+  waveform.channels = {}
+  waveform.length = {}
+  waveform.rate = {}
   
-  --add a samples
+  --add samples
   file = {}
   file[1] = _path.dust.."audio/common/purpDrums/Kick.wav"
   file[2] = _path.dust.."audio/common/808/808-SD.wav"
@@ -124,11 +127,16 @@ function init()
     softcut.rate(i,1.0)
     -- enable voice 1 play
     softcut.play(i,0)
+    
+    --waveform lengths init
+    waveform.channels[i], waveform.length[i], waveform.rate[i] = audio.file_info(file[i + 1])
+    waveform.length[i] = waveform.length[i] * (1 / waveform.rate[i])
   end
   
   for i=0,3,1 do
     currentTrack = i
-    softcut.render_buffer(1,i,1,editArea.width)
+    softcut.render_buffer(1,i,waveform.length[i],editArea.width)
+    waveform.isLoaded[i] = true
   end
   currentTrack = 0
 
@@ -139,12 +147,16 @@ end
 function load_file(file) 
   if file ~= "cancel" then
     --get file info
-    
+    local ch, length, rate = audio.file_info(file)
+    local lengthInS = length * (1 / rate)
+    if lengthInS > 1 then lengthInS = 1 end
+    waveform.length[currentTrack] = lengthInS
     --load file into buffer
-    softcut.buffer_read_mono(file,0,currentTrack,-1,1,1)
+    softcut.buffer_read_mono(file,0,currentTrack,lengthInS,1,1)
     --read samples into waveformSamples (eventually)
-    softcut.render_buffer(1,currentTrack,1,editArea.width)
+    softcut.render_buffer(1,currentTrack,lengthInS,editArea.width)
   end
+  
 end
 
 function drawEvents()
@@ -261,8 +273,7 @@ function drawSampler()
 	--waveform
 	screen.level(15)
 	if waveform.isLoaded and waveform.samples[currentTrack] == nil then
-	  print("new render")
-	  softcut.render_buffer(1,currentTrack,1,editArea.width)
+	  softcut.render_buffer(1,currentTrack,waveform.length[currentTrack],editArea.width)
 	end
   if waveform.samples[currentTrack] == nil then
     screen.move(32,32)
@@ -381,7 +392,7 @@ function enc(e, d)
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
     if sampleView and not waveform.isLoaded[currentTrack] then
       --read samples into waveformSamples (eventually)
-      softcut.render_buffer(1,currentTrack,1,editArea.width)
+      softcut.render_buffer(1,currentTrack,waveform.length[currentTrack],editArea.width)
     end
   end
   
