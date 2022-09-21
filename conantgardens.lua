@@ -32,68 +32,9 @@
 util = require "util"
 fileselect = require "fileselect"
 
-function init ()
-  --inits
-  currentTrack = 0
-  segmentLength = 2
-  beatCursor = 1
-  -- structure: [position, length, track, dynamic] 
-  trackEvents = {}
-  currentDynamic = 1.0
-  isPlaying = false
-  editArea = {width=120, height=56, border=4}
-  tracksAmount = 4
-  editArea.trackHeight = editArea.height / tracksAmount
-  resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
-  heldKeys = {false, false, false}
-  nowPosition = {-1, -1}
-  weMoving = false
-  theClock = clock.run(ticker)
-  clockPosition = 0
-  tick = 1
-  -- offset for entire track +- in 192ths
-  trackTiming = {0,0,0,0}
-  sampleView = false
-  softcut.event_render(copy_samples)
-	waveformSamples = {}
-  
-  --add a samples
-  file = {}
-  file[1] = _path.dust.."audio/common/purpDrums/Kick.wav"
-  file[2] = _path.dust.."audio/common/808/808-SD.wav"
-  file[3] = _path.dust.."audio/common/808/808-CH.wav"
-  file[4] = _path.dust.."audio/common/808/808-CP.wav"
-
-    -- clear buffer
-  softcut.buffer_clear()
-  -- read file into buffer
-  -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
-  for i=0,3,1 do
-    softcut.buffer_read_mono(file[i+1],0,i,-1,1,1)
-    -- enable voice 1
-    softcut.enable(i,1)
-    -- set voice 1 to buffer 1
-    softcut.buffer(i,1)
-    -- set voice 1 level to 1.0
-    softcut.level(i,1.0)
-    -- voice 1 disable loop
-    softcut.loop(i,0)
-    softcut.loop_start(i,i)
-    softcut.loop_end(i,i+0.2)
-    -- set voice 1 rate to 1.0
-    softcut.rate(i,1.0)
-    -- enable voice 1 play
-    softcut.play(i,0)
-  end
-  
-  
-  for i = 1, 3 do
---    norns.encoders.set_sens(i, 16)
---    counters:reset_enc(i)
-  end
-  
-  -- ready!
-  redraw()
+function copy_samples(ch, start, interval, samples)
+  waveform.samples[currentTrack] = samples
+  waveform.isLoaded[currentTrack] = true
 end
 
 --tick along, play events
@@ -129,16 +70,83 @@ function ticker()
   end
 end
 
-function copy_samples (ch, start, interval_per_sample, samples)
-  print("copying samples, like " .. samples[1])
-  waveformSamples[currentTrack] = samples
+function init()
+  --inits
+  currentTrack = 0
+  segmentLength = 2
+  beatCursor = 1
+  -- structure: [position, length, track, dynamic] 
+  trackEvents = {}
+  currentDynamic = 1.0
+  isPlaying = false
+  editArea = {width=120, height=56, border=4}
+  tracksAmount = 4
+  editArea.trackHeight = editArea.height / tracksAmount
+  resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
+  heldKeys = {false, false, false}
+  nowPosition = {-1, -1}
+  weMoving = false
+  theClock = clock.run(ticker)
+  clockPosition = 0
+  tick = 1
+  -- offset for entire track +- in 192ths
+  trackTiming = {0,0,0,0}
+  sampleView = false
+  softcut.event_render(copy_samples)
+  waveform = {}
+  waveform.isLoaded = {false, false, false, false}
+  waveform.samples = {}
+  
+  --add a samples
+  file = {}
+  file[1] = _path.dust.."audio/common/purpDrums/Kick.wav"
+  file[2] = _path.dust.."audio/common/808/808-SD.wav"
+  file[3] = _path.dust.."audio/common/808/808-CH.wav"
+  file[4] = _path.dust.."audio/common/808/808-CP.wav"
+  
+  -- clear buffer
+  softcut.buffer_clear()
+  -- read file into buffer
+  -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
+  for i=0,3,1 do
+    softcut.buffer_read_mono(file[i+1],0,i,-1,1,1)
+    -- enable voice 1
+    softcut.enable(i,1)
+    -- set voice 1 to buffer 1
+    softcut.buffer(i,1)
+    -- set voice 1 level to 1.0
+    softcut.level(i,1.0)
+    -- voice 1 disable loop
+    softcut.loop(i,0)
+    softcut.loop_start(i,i)
+    softcut.loop_end(i,i+0.2)
+    -- set voice 1 rate to 1.0
+    softcut.rate(i,1.0)
+    -- enable voice 1 play
+    softcut.play(i,0)
+  end
+  
+  for i=0,3,1 do
+    currentTrack = i
+    softcut.render_buffer(1,i,1,editArea.width)
+    while waveform.samples[i][1] == nil do
+      clock.sync(1/10)
+    end
+  end
+  currentTrack = 0
+
+  -- ready!
+  redraw()
 end
 
 function load_file(file) 
   if file ~= "cancel" then
+    --get file info
+    
+    --load file into buffer
     softcut.buffer_read_mono(file,0,currentTrack,-1,1,1)
-    print("loaded " .. file .. " into track " .. currentTrack + 1)
-    softcut.render_buffer(currentTrack,0,1,editArea.width)
+    --read samples into waveformSamples (eventually)
+    softcut.render_buffer(1,currentTrack,1,editArea.width)
   end
 end
 
@@ -217,10 +225,6 @@ function drawSequencer()
   end
   screen.fill()
   
-  -- text labels
-  --what track
-  screen.move(107,5)
-  screen.text("trk " .. currentTrack + 1)
   --shifting?
   if heldKeys[1] then
     screen.level(8)
@@ -243,6 +247,13 @@ function drawSequencer()
       screen.text(resolutions[segmentLength])
     end
   end
+  
+  -- text labels
+  screen.move(0, 62)
+  screen.text("spl")
+  --what track
+  screen.move(107,5)
+  screen.text("trk " .. currentTrack + 1)
 end
 
 function drawSampler()
@@ -252,10 +263,21 @@ function drawSampler()
 	screen.fill()
 	--waveform
 	screen.level(15)
-	if waveformSamples[1] ~= nil then
-  	for i=0, 1, editArea.width do
-	    screen.pixel(i + 4, util.round((waveformSamples[currentTrack][i] * editArea.height + 4), 1))
+	if waveform.isLoaded and waveform.samples[currentTrack] == nil then
+	  print("new render")
+	  softcut.render_buffer(1,currentTrack,1,editArea.width)
+	end
+	if waveform.isLoaded then
+  	for i=1, editArea.width, 1 do
+  	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack][i] * editArea.height * 0.5)
+	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack][i] * editArea.height * -0.5)
+	    screen.stroke()
 	  end
+	else 
+	   screen.move(10,32)
+	   screen.text("no file loaded")
+	   screen.move(20,62)
+	   screen.text("load")
 	end
 	screen.fill()
 	
@@ -264,6 +286,9 @@ function drawSampler()
 	--track label
   screen.move(107,5)
   screen.text("trk " .. currentTrack + 1)
+  --"seq"
+  screen.move(0,62)
+  screen.text("seq")
 end
 
 function redraw()
@@ -275,11 +300,11 @@ function redraw()
   --a play/stop icon, to visualise play state
   screen.level(10)
   if (isPlaying == true) then
-    screen.move(0,60)
-    screen.line(0,64)
-    screen.line(4,62)
+    screen.move(0,0)
+    screen.line(0,4)
+    screen.line(4,2)
     screen.close()
-    else screen.rect(0,60,4,4)
+    else screen.rect(0,0,4,4)
   end
   screen.fill()
 
@@ -306,24 +331,28 @@ end
 function enc(e, d)
   --SHIFTED
   if (heldKeys[1]) then
-    if (e == 2) then
-      trackTiming[currentTrack +1] = trackTiming[currentTrack +1] + d
-    end
-    if (e == 3) then
-      -- test for position, adjust note dynamic
-      local position = (beatCursor - 1) / (resolutions[segmentLength])
-      local length = 1 / (resolutions[segmentLength])
-      currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-      for i=#trackEvents, 1, -1 do
-      --is event under cursor?
-        if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
-          --yes
-          currentDynamic = trackEvents[i][4]
-          trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-        else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
-          currentDynamic = trackEvents[i][4]
-          trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-        end
+    if sampleView then
+      
+    else
+      if (e == 2) then
+        trackTiming[currentTrack +1] = trackTiming[currentTrack +1] + d
+      end
+      if (e == 3) then
+        -- test for position, adjust note dynamic
+        local position = (beatCursor - 1) / (resolutions[segmentLength])
+        local length = 1 / (resolutions[segmentLength])
+        currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+        for i=#trackEvents, 1, -1 do
+        --is event under cursor?
+          if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
+            --yes
+            currentDynamic = trackEvents[i][4]
+            trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+          else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
+            currentDynamic = trackEvents[i][4]
+            trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+          end
+          end
         end
       end
     end
@@ -349,6 +378,10 @@ function enc(e, d)
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+    if sampleView and not waveform.isLoaded[currentTrack] then
+      --read samples into waveformSamples (eventually)
+      softcut.render_buffer(1,currentTrack,1,editArea.width)
+    end
   end
   
   --cursor
@@ -366,7 +399,7 @@ function enc(e, d)
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
   end
   
-  if not isPlaying then
+  if sampleView or not isPlaying then
     redraw()
 	end
 end
