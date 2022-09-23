@@ -32,9 +32,21 @@
 util = require "util"
 fileselect = require "fileselect"
 
+-- got caught with two situations for rendering, first load and loading a sample
+-- perhaps, I need a general call when loading the view in sample view (going in circles?)
 function copy_samples(ch, start, interval, samples)
-  waveform.samples[currentTrack] = samples
-  waveform.isLoaded[currentTrack] = true
+  if weIniting == true then
+    print("weIniting = true")
+    for j = 1, editArea.width * 4, 1 do
+      waveform.samples[j] = samples[j]
+    end
+  else
+    print("rendering a single track samples")
+    for j = 1 + currentTrack * editArea.width, editArea.width, 1 do
+      waveform.samples[j] = samples[j]
+    end
+  end
+  print("done rendering waveforms")
 end
 
 --tick along, play events
@@ -71,6 +83,7 @@ function ticker()
 end
 
 function init()
+  weIniting = true
   --inits
   currentTrack = 0
   segmentLength = 2
@@ -102,46 +115,48 @@ function init()
   
   --add samples
   file = {}
-  file[1] = _path.dust.."audio/common/purpDrums/Kick.wav"
-  file[2] = _path.dust.."audio/common/808/808-SD.wav"
-  file[3] = _path.dust.."audio/common/808/808-CH.wav"
-  file[4] = _path.dust.."audio/common/808/808-CP.wav"
+  file[0] = _path.dust.."audio/common/purpDrums/Kick.wav"
+  file[1] = _path.dust.."audio/common/808/808-SD.wav"
+  file[2] = _path.dust.."audio/common/808/808-CH.wav"
+  file[3] = _path.dust.."audio/common/808/808-CP.wav"
   
   -- clear buffer
   softcut.buffer_clear()
   -- read file into buffer
   -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
   for i=0,3,1 do
-    softcut.buffer_read_mono(file[i+1],0,i,-1,1,1)
-    -- enable voice 1
+    local ch, length, rate = audio.file_info(file[i])
+    local lengthInS = length * (1 / rate)
+    if lengthInS > 1 then lengthInS = 1 end
+    waveform.length[i] = lengthInS
+    --load file into buffer
+    softcut.buffer_read_mono(file[i],0,i,waveform.length[i],1,1)
+    -- enable voices
     softcut.enable(i,1)
-    -- set voice 1 to buffer 1
+    -- set voices to buffer 1
     softcut.buffer(i,1)
-    -- set voice 1 level to 1.0
+    -- set voices level to 1.0
     softcut.level(i,1.0)
-    -- voice 1 disable loop
+    -- voices disable loop
     softcut.loop(i,0)
     softcut.loop_start(i,i)
     softcut.loop_end(i,i+0.2)
-    -- set voice 1 rate to 1.0
+    -- set voices rate to 1.0
     softcut.rate(i,1.0)
-    -- enable voice 1 play
+    -- disable voices play
     softcut.play(i,0)
-    
-    --waveform lengths init
-    waveform.channels[i], waveform.length[i], waveform.rate[i] = audio.file_info(file[i + 1])
-    waveform.length[i] = waveform.length[i] * (1 / waveform.rate[i])
   end
   
-  for i=0,3,1 do
-    currentTrack = i
-    softcut.render_buffer(1,i,waveform.length[i],editArea.width)
-    waveform.isLoaded[i] = true
-  end
+  print("rendering waveforms...")
+  weIniting = true
+  softcut.render_buffer(1,0,4,editArea.width * 4)
+  
+  
   currentTrack = 0
 
   -- ready!
   redraw()
+
 end
 
 function load_file(file) 
@@ -153,10 +168,9 @@ function load_file(file)
     waveform.length[currentTrack] = lengthInS
     --load file into buffer
     softcut.buffer_read_mono(file,0,currentTrack,lengthInS,1,1)
-    --read samples into waveformSamples (eventually)
+    --read samples into waveformSamples (eventually) ch, start, interval, samples
     softcut.render_buffer(1,currentTrack,lengthInS,editArea.width)
   end
-  
 end
 
 function drawEvents()
@@ -272,17 +286,10 @@ function drawSampler()
 	screen.fill()
 	--waveform
 	screen.level(15)
-	if waveform.isLoaded and waveform.samples[currentTrack] == nil then
-	  softcut.render_buffer(1,currentTrack,waveform.length[currentTrack],editArea.width)
-	end
-  if waveform.samples[currentTrack] == nil then
-    screen.move(32,32)
-    screen.text("loading")
-    screen.update() end
-	if waveform.isLoaded and waveform.samples[currentTrack] ~= nil then
+	if waveform.samples[currentTrack * editArea.width] ~= nil then
   	for i=1, editArea.width, 1 do
-  	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack][i] * editArea.height * 0.5)
-	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack][i] * editArea.height * -0.5)
+  	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * 0.5)
+	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * -0.5)
 	    screen.stroke()
   	end
 	else
@@ -304,6 +311,7 @@ function drawSampler()
 end
 
 function redraw()
+  if weIniting then weIniting = false end
   screen.clear()
   
   if sampleView then drawSampler()
@@ -390,10 +398,6 @@ function enc(e, d)
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
-    if sampleView and not waveform.isLoaded[currentTrack] then
-      --read samples into waveformSamples (eventually)
-      softcut.render_buffer(1,currentTrack,waveform.length[currentTrack],editArea.width)
-    end
   end
   
   --cursor
