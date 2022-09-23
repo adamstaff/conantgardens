@@ -35,18 +35,9 @@ fileselect = require "fileselect"
 -- got caught with two situations for rendering, first load and loading a sample
 -- perhaps, I need a general call when loading the view in sample view (going in circles?)
 function copy_samples(ch, start, interval, samples)
-  if weIniting == true then
-    print("weIniting = true")
-    for j = 1, editArea.width * 4, 1 do
-      waveform.samples[j] = samples[j]
-    end
-  else
-    print("rendering a single track samples")
-    for j = 1 + currentTrack * editArea.width, editArea.width, 1 do
-      waveform.samples[j] = samples[j]
-    end
+  for i = 1, editArea.width, 1 do
+    waveform.samples[i] = samples[i]
   end
-  print("done rendering waveforms")
 end
 
 --tick along, play events
@@ -83,7 +74,6 @@ function ticker()
 end
 
 function init()
-  weIniting = true
   --inits
   currentTrack = 0
   segmentLength = 2
@@ -125,6 +115,7 @@ function init()
   -- read file into buffer
   -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
   for i=0,3,1 do
+		-- get file length in s
     local ch, length, rate = audio.file_info(file[i])
     local lengthInS = length * (1 / rate)
     if lengthInS > 1 then lengthInS = 1 end
@@ -148,12 +139,8 @@ function init()
   end
   
   print("rendering waveforms...")
-  weIniting = true
   softcut.render_buffer(1,0,4,editArea.width * 4)
-  
-  
-  currentTrack = 0
-
+	
   -- ready!
   redraw()
 
@@ -284,9 +271,11 @@ function drawSampler()
 	screen.level(1)
 	screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
 	screen.fill()
-	--waveform
+
+  --draw waveform!
 	screen.level(15)
-	if waveform.samples[currentTrack * editArea.width] ~= nil then
+  --check we're loaded before drawing
+	if --[[waveform.isLoaded[currentTrack] and]] waveform.samples[currentTrack * editArea.width] ~= nil then
   	for i=1, editArea.width, 1 do
   	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * 0.5)
 	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * -0.5)
@@ -311,7 +300,6 @@ function drawSampler()
 end
 
 function redraw()
-  if weIniting then weIniting = false end
   screen.clear()
   
   if sampleView then drawSampler()
@@ -398,6 +386,10 @@ function enc(e, d)
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+    if sampleView and not waveform.isLoaded[currentTrack] then
+      print("this is when we could load a waveform")
+      -- and do? waveform.isLoaded[currentTrack] = true
+    end
   end
   
   --cursor
