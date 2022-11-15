@@ -28,16 +28,31 @@
 -- shift+E1:
 -- shift+E2: Start+end
 -- shift+E3: Sample volume
+--
+-- TODO: 
+-- framerate shenannigans when the cursor is 1/1 etc
+-- dynamics level crashes when adjusting (value gets set to nil??)
+-- sample start / end points
+-- 
 
 util = require "util"
 fileselect = require "fileselect"
 
--- got caught with two situations for rendering, first load and loading a sample
--- perhaps, I need a general call when loading the view in sample view (going in circles?)
 function copy_samples(ch, start, interval, samples)
-  for i = 1, editArea.width, 1 do
-    waveform.samples[i] = samples[i]
+  if weIniting == true then
+    print("weIniting = true")
+    for j = 1, editArea.width * 4, 1 do
+      waveform.samples[j] = samples[j]
+    end
+  else
+    print("rendering a single track samples")
+    for j = 1 + currentTrack * editArea.width, editArea.width, 1 do
+      --print("rendering " .. samples[j] .. " at position " ..j)
+      waveform.samples[j] = samples[j]
+    end
   end
+  print("done rendering waveforms")
+  redraw()
 end
 
 --tick along, play events
@@ -64,7 +79,7 @@ function ticker()
       end
     end
     --limit redraw
-    --change this to not be tied to tempo!
+    --change this to not have visuals tied to tempo!
     if (math.floor(clockPosition % 24) == 0 and isPlaying and not sampleView) then redraw() end
     --tick
     clockPosition = clockPosition + tick
@@ -73,7 +88,15 @@ function ticker()
   end
 end
 
+function sleeper()
+  clock.sleep(1)
+  print("done waiting")
+  weIniting = false
+  redraw()
+end
+
 function init()
+  weIniting = true
   --inits
   currentTrack = 0
   segmentLength = 2
@@ -115,7 +138,6 @@ function init()
   -- read file into buffer
   -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
   for i=0,3,1 do
-		-- get file length in s
     local ch, length, rate = audio.file_info(file[i])
     local lengthInS = length * (1 / rate)
     if lengthInS > 1 then lengthInS = 1 end
@@ -138,9 +160,12 @@ function init()
     softcut.play(i,0)
   end
   
-  print("rendering waveforms...")
+  --print("rendering waveforms...")
+  --weIniting = true
   softcut.render_buffer(1,0,4,editArea.width * 4)
-	
+
+  currentTrack = 0
+
   -- ready!
   redraw()
 
@@ -153,10 +178,10 @@ function load_file(file)
     local lengthInS = length * (1 / rate)
     if lengthInS > 1 then lengthInS = 1 end
     waveform.length[currentTrack] = lengthInS
-    --load file into buffer
-    softcut.buffer_read_mono(file,0,currentTrack,lengthInS,1,1)
-    --read samples into waveformSamples (eventually) ch, start, interval, samples
-    softcut.render_buffer(1,currentTrack,lengthInS,editArea.width)
+    --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
+    softcut.buffer_read_mono(file, 0, currentTrack, lengthInS, 1, 1, 0)
+    --read samples into waveformSamples (eventually) (channel, start, duration, samples)
+    softcut.render_buffer(1,currentTrack,1,editArea.width)
   end
 end
 
@@ -239,8 +264,10 @@ function drawSequencer()
   if heldKeys[1] then
     screen.level(8)
     for i=1, tracksAmount, 1 do
-      screen.move(editArea.border - 2 + editArea.width / 2, editArea.border + i * editArea.trackHeight - 4)
-      screen.text(trackTiming[i])
+      screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i], editArea.border + i * editArea.trackHeight - 4)
+      if trackTiming[i] > 0 then
+        screen.text("+"..trackTiming[i])
+      else screen.text(trackTiming[i]) end
       screen.move(116, 63)
       screen.text(currentDynamic)
     end
@@ -271,11 +298,9 @@ function drawSampler()
 	screen.level(1)
 	screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
 	screen.fill()
-
-  --draw waveform!
+	--waveform
 	screen.level(15)
-  --check we're loaded before drawing
-	if --[[waveform.isLoaded[currentTrack] and]] waveform.samples[currentTrack * editArea.width] ~= nil then
+	if waveform.samples[currentTrack * editArea.width + 1] ~= nil then
   	for i=1, editArea.width, 1 do
   	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * 0.5)
 	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * -0.5)
@@ -284,9 +309,9 @@ function drawSampler()
 	else
 	   screen.move(10,32)
 	   screen.text("no file loaded")
-	   screen.move(20,62)
-	   screen.text("load")
 	end
+	screen.move(20,62)
+	screen.text("load")
 	screen.fill()
 	
 	-- text labels
@@ -302,6 +327,14 @@ end
 function redraw()
   screen.clear()
   
+  if weIniting then
+    --wait for proper render
+    --clock position to hold?
+    screen.clear()
+    screen.text("loading...")
+    clock.run(sleeper)
+  else
+  
   if sampleView then drawSampler()
   else drawSequencer() end
   
@@ -313,6 +346,8 @@ function redraw()
     screen.line(4,2)
     screen.close()
     else screen.rect(0,0,4,4)
+  end
+  --else end
   end
   screen.fill()
 
@@ -386,10 +421,6 @@ function enc(e, d)
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
-    if sampleView and not waveform.isLoaded[currentTrack] then
-      print("this is when we could load a waveform")
-      -- and do? waveform.isLoaded[currentTrack] = true
-    end
   end
   
   --cursor
@@ -438,6 +469,7 @@ function key(k, z)
 	if sampleView and k == 3 and z == 0 then
 	  print("loading a file")
 		fileselect.enter(_path.audio,load_file)
+		redraw()
 	end
   
   --add and remove events
