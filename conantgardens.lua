@@ -28,12 +28,6 @@
 -- shift+E1:
 -- shift+E2: Start+end
 -- shift+E3: Sample volume
---
--- TODO: 
--- framerate shenannigans when the cursor is 1/1 etc
--- dynamics level crashes when adjusting (value gets set to nil??)
--- sample start / end points
--- 
 
 util = require "util"
 fileselect = require "fileselect"
@@ -52,7 +46,7 @@ function copy_samples(ch, start, interval, samples)
     end
   end
   print("done rendering waveforms")
-  redraw()
+  screenDirty = true
 end
 
 --tick along, play events
@@ -78,26 +72,34 @@ function ticker()
         end
       end
     end
-    --limit redraw
-    --change this to not have visuals tied to tempo!
-    if (math.floor(clockPosition % 24) == 0 and isPlaying and not sampleView) then redraw() end
     --tick
     clockPosition = clockPosition + tick
     --wait
     clock.sync(1/192)
+    if clockPosition % 12 == 0 then screenDirty = true end
+  end
+end
+
+function redraw_clock() ----- a clock that draws space
+  while true do ------------- "while true do" means "do this forever"
+    clock.sleep(1/15) ------- pause for a fifteenth of a second (aka 15fps)
+    if screenDirty and not weLoading then ---- only if something changed
+      redraw() -------------- redraw space
+      screen_dirty = false -- and everything is clean again
+    end
   end
 end
 
 function sleeper()
   clock.sleep(1)
-  print("done waiting")
   weIniting = false
-  redraw()
 end
 
 function init()
   weIniting = true
+  weLoading = false
   --inits
+  redraw_clock_id = clock.run(redraw_clock)
   currentTrack = 0
   segmentLength = 2
   beatCursor = 1
@@ -159,15 +161,12 @@ function init()
     -- disable voices play
     softcut.play(i,0)
   end
-  
-  --print("rendering waveforms...")
-  --weIniting = true
+
   softcut.render_buffer(1,0,4,editArea.width * 4)
 
   currentTrack = 0
-
-  -- ready!
-  redraw()
+  
+  screenDirty = true
 
 end
 
@@ -178,10 +177,13 @@ function load_file(file)
     local lengthInS = length * (1 / rate)
     if lengthInS > 1 then lengthInS = 1 end
     waveform.length[currentTrack] = lengthInS
+    -- erase section of buffer
+    softcut.buffer_clear_region(currentTrack, 1, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, currentTrack, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
     softcut.render_buffer(1,currentTrack,1,editArea.width)
+    weLoading = false
   end
 end
 
@@ -209,40 +211,17 @@ function drawSequencer()
   -- squares... 
   --a dim background
   screen.level(1)
-  --  screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
-  --  screen.fill()
-  --dither
-  --  screen.level(0)
-  for i=0, editArea.height - 1, 1 do
-    for j=0, editArea.width - 1, 2 do
-      screen.pixel(j + 4 + (i%2),i + 4)
-    end
-  end
+  screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
   screen.fill()
   --track sel
   screen.level(4)
---  screen.rect(editArea.border, editArea.border + editArea.trackHeight * currentTrack, editArea.width, editArea.trackHeight)
-  for i=editArea.border + editArea.trackHeight * currentTrack, editArea.border + editArea.trackHeight + editArea.trackHeight * currentTrack - 1, 1 do
-    for j=4, editArea.width + editArea.border - 1, 2 do
-      screen.pixel(j + i%2, i)
-    end
-  end
+  screen.rect(editArea.border, editArea.border + editArea.trackHeight * currentTrack, editArea.width, editArea.trackHeight)
   --time select
---  screen.rect(editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border, math.max(editArea.width / resolutions[segmentLength],1), editArea.height)
-  for i=editArea.border, editArea.border + editArea.height - 1, 1 do
-    for j=editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])) + editArea.width / resolutions[segmentLength] - 1, 2 do
-      screen.pixel(j + i%2, i)
-    end
-  end
+  screen.rect(editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border, math.max(editArea.width / resolutions[segmentLength],1), editArea.height)
   screen.fill()
   --crossover, where track and time selections meet
   screen.level(6)
---  screen.rect(editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border + editArea.trackHeight * currentTrack, math.max(editArea.width / resolutions[segmentLength],1), editArea.trackHeight)
-  for i=editArea.border + editArea.trackHeight * currentTrack, editArea.border + editArea.trackHeight * currentTrack + editArea.trackHeight - 1 do
-    for j=editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])) + editArea.width / resolutions[segmentLength] - 1, 2 do
-      screen.pixel(j + i%2, i)
-    end
-  end
+  screen.rect(editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border + editArea.trackHeight * currentTrack, math.max(editArea.width / resolutions[segmentLength],1), editArea.trackHeight)
   screen.fill()
   --events
   drawEvents()
@@ -263,6 +242,8 @@ function drawSequencer()
   --shifting?
   if heldKeys[1] then
     screen.level(8)
+    screen.move(0, 62)
+    if isPlaying then screen.text("stop") else screen.text("play") end
     for i=1, tracksAmount, 1 do
       screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i], editArea.border + i * editArea.trackHeight - 4)
       if trackTiming[i] > 0 then
@@ -282,12 +263,12 @@ function drawSequencer()
       --length
       screen.move(116, 63)
       screen.text(resolutions[segmentLength])
+      -- swap page
+      screen.move(0, 62)
+      screen.text("spl")
     end
   end
-  
-  -- text labels
-  screen.move(0, 62)
-  screen.text("spl")
+
   --what track
   screen.move(107,5)
   screen.text("trk " .. currentTrack + 1)
@@ -352,6 +333,7 @@ function redraw()
   screen.fill()
 
   screen.update()
+
 end
 
 function moveEvent(i,e,d)
@@ -372,13 +354,14 @@ function moveEvent(i,e,d)
 end
 
 function enc(e, d)
-  --SHIFTED
+  --SHIFTING??
   if (heldKeys[1]) then
     if sampleView then
-      
+      --sample view shift behaviour
     else
       if (e == 2) then
         trackTiming[currentTrack +1] = trackTiming[currentTrack +1] + d
+        screenDirty = true
       end
       if (e == 3) then
         -- test for position, adjust note dynamic
@@ -387,16 +370,19 @@ function enc(e, d)
         currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
         for i=#trackEvents, 1, -1 do
         --is event under cursor?
-          if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
-            --yes
-            currentDynamic = trackEvents[i][4]
-            trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-          else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
-            currentDynamic = trackEvents[i][4]
-            trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-          end
+          if currentTrack == trackEvents[i][3] then
+            if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2]) then
+              --yes
+              currentDynamic = trackEvents[i][4]
+              trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+            else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
+              currentDynamic = trackEvents[i][4]
+              trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+            end
+            end
           end
         end
+        screenDirty = true
       end
     end
   end
@@ -416,16 +402,19 @@ function enc(e, d)
         end
       end
     end
+    screenDirty = true
   end
 
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+    screenDirty = true
   end
   
   --cursor
   if (e == 2 and not heldKeys[1]) then
     beatCursor = util.clamp(beatCursor + d, 1, resolutions[segmentLength])
+    screenDirty = true
   end
   
   --segment Length
@@ -436,11 +425,15 @@ function enc(e, d)
 
     -- round up beatCursor
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
+    screenDirty = true
   end
   
   if sampleView or not isPlaying then
-    redraw()
-	end
+    screenDirty = true
+  end
+
+  screenDirty = true
+
 end
 
 function key(k, z)
@@ -458,18 +451,22 @@ function key(k, z)
     if (isPlaying) then
       isPlaying = false
       clockPosition = 0
+      screenDirty = true
     else
       isPlaying = true
       clock.run(ticker)
     end
-  else if (k == 2 and z == 0) then sampleView = not sampleView end
+  else if (k == 2 and z == 0) then 
+    sampleView = not sampleView 
+    screenDirty = true 
+  end
   end
 
   -- load sample
 	if sampleView and k == 3 and z == 0 then
+	  weLoading = true
 	  print("loading a file")
 		fileselect.enter(_path.audio,load_file)
-		redraw()
 	end
   
   --add and remove events
@@ -491,12 +488,17 @@ function key(k, z)
           end
         end
       end
+      screenDirty = true
     end
     if (foundOne == 0 and not weMoving) then
-      table.insert(trackEvents, {position, length, track, currentDynamic}) 
+      table.insert(trackEvents, {position, length, track, currentDynamic})
+      screenDirty = true
     end
     weMoving = false
   end
 
-  redraw()
+end
+
+function cleanup() --------------- cleanup() is automatically called on script close
+  clock.cancel(redraw_clock_id) -- melt our clock vie the id we noted
 end
