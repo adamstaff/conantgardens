@@ -35,11 +35,11 @@ fileselect = require "fileselect"
 function copy_samples(ch, start, interval, samples)
   if weIniting == true then
     print("weIniting = true")
-    for j = 1, editArea.width * 4, 1 do
+    for j = 1, editArea.width * tracksAmount, 1 do
       waveform.samples[j] = samples[j]
     end
   else
-    print("rendering a single track samples")
+    print("rendering a single track samples onto track " .. currentTrack)
     for j = 1 + currentTrack * editArea.width, editArea.width, 1 do
       --print("rendering " .. samples[j] .. " at position " ..j)
       waveform.samples[j] = samples[j]
@@ -53,18 +53,18 @@ end
 function ticker()
   while isPlaying do
     --loop clock
-    if (clockPosition > 768) then clockPosition = 0 end
+    if (clockPosition > totalBeats) then clockPosition = 0 end
     --check if it's time for an event
     for i, data in ipairs(trackEvents) do
       if (data[1] ~= nil and data[2] ~= nil and data[3] ~= nil and data[4] ~=nil) then
         --offset by track offset
         local localTick = clockPosition - trackTiming[data[3]+1]
         --check we're not out of bounds
-        if localTick > 768 then localTick = 0 + trackTiming[data[3]+1]
-        else if localTick < 0 then localTick = 768 + trackTiming[data[3]+1] end 
+        if localTick > totalBeats then localTick = 0 + trackTiming[data[3]+1]
+        else if localTick < 0 then localTick = totalBeats + trackTiming[data[3]+1] end 
         end
         --finally, play an event?
-        if (localTick == math.floor(768 * (data[1]))) then
+        if (localTick == math.floor(totalBeats * (data[1]))) then
           softcut.position(data[3],data[3])
           --set dynamic level
           softcut.level(data[3],data[4])
@@ -100,25 +100,32 @@ function init()
   weLoading = false
   --inits
   redraw_clock_id = clock.run(redraw_clock)
+  --global x and y - tracks and beats to sequence:
+  --todo make params
+  tracksAmount = 8
   currentTrack = 0
-  segmentLength = 2
+  beatsAmount = 8
+  totalBeats = 192 * beatsAmount
+  --start with cursor set to 8th notes:
+  segmentLength = 6
+  resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
   beatCursor = 1
   -- structure: [position, length, track, dynamic] 
   trackEvents = {}
   currentDynamic = 1.0
-  isPlaying = false
+  --drawing stuff
   editArea = {width=120, height=56, border=4}
-  tracksAmount = 4
   editArea.trackHeight = editArea.height / tracksAmount
-  resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
   heldKeys = {false, false, false}
   nowPosition = {-1, -1}
+  isPlaying = false
   weMoving = false
   theClock = clock.run(ticker)
   clockPosition = 0
   tick = 1
   -- offset for entire track +- in 192ths
-  trackTiming = {0,0,0,0}
+  trackTiming = {}
+  for i=1, tracksAmount, 1 do trackTiming[i] = 0 end
   sampleView = false
   softcut.event_render(copy_samples)
   waveform = {}
@@ -162,6 +169,7 @@ function init()
     softcut.play(i,0)
   end
 
+  -- ch, start, duration, number of samples to make
   softcut.render_buffer(1,0,4,editArea.width * 4)
 
   currentTrack = 0
@@ -217,24 +225,32 @@ function drawSequencer()
   screen.level(4)
   screen.rect(editArea.border, editArea.border + editArea.trackHeight * currentTrack, editArea.width, editArea.trackHeight)
   --time select
-  screen.rect(editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border, math.max(editArea.width / resolutions[segmentLength],1), editArea.height)
+  screen.rect(
+    editArea.border + ((beatCursor - 1) * (editArea.width / (resolutions[segmentLength] * (beatsAmount / 4)))),
+    editArea.border,
+    math.max(editArea.width / resolutions[segmentLength] * (beatsAmount / 16),1),
+    editArea.height)
   screen.fill()
   --crossover, where track and time selections meet
   screen.level(6)
-  screen.rect(editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength])), editArea.border + editArea.trackHeight * currentTrack, math.max(editArea.width / resolutions[segmentLength],1), editArea.trackHeight)
+  screen.rect(
+    editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength] * (beatsAmount / 16))),
+    editArea.border + editArea.trackHeight * currentTrack,
+    math.max(editArea.width / resolutions[segmentLength] * (beatsAmount / 16),1),
+    editArea.trackHeight)
   screen.fill()
   --events
   drawEvents()
   --play head line, position updated by and taken from ticker() 
   screen.level(0)
-  screen.rect(editArea.border + (clockPosition / 768) * editArea.width, editArea.border, 1, editArea.height)
+  screen.rect(editArea.border + (clockPosition / totalBeats) * editArea.width, editArea.border, 1, editArea.height)
   screen.fill()
   
   --guides, little dots to demarcate bar lines and track lines
   screen.level(0)
-  for beat=0, 3, 1 do
+  for beat=0, beatsAmount, 1 do
     for track=0, tracksAmount, 1 do
-      screen.pixel(editArea.border + beat * (editArea.width / 4), editArea.border + track * editArea.trackHeight)
+      screen.pixel(editArea.border + beat * (editArea.width / beatsAmount), editArea.border + track * editArea.trackHeight)
     end
   end
   screen.fill()
@@ -245,7 +261,7 @@ function drawSequencer()
     screen.move(0, 62)
     if isPlaying then screen.text("stop") else screen.text("play") end
     for i=1, tracksAmount, 1 do
-      screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i], editArea.border + i * editArea.trackHeight - 4)
+      screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i], editArea.border + i * editArea.trackHeight -1)
       if trackTiming[i] > 0 then
         screen.text("+"..trackTiming[i])
       else screen.text(trackTiming[i]) end
@@ -332,7 +348,7 @@ function redraw()
   end
   screen.fill()
 
-  screen.update()
+  screen.update()a
 
 end
 
@@ -344,7 +360,7 @@ function moveEvent(i,e,d)
     end
     if (e == 2) then
     -- move in time
-      local length = 1 / (resolutions[segmentLength])
+      local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
       --at some point,an algo for 'is there an event in the way'
       -- will it go out of bounds?
       if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
@@ -390,7 +406,7 @@ function enc(e, d)
   --if we're holding k3 to move
   if (heldKeys[3] == true) then
     weMoving = true
-    local position = (beatCursor - 1) / (resolutions[segmentLength])
+    local position = (beatCursor - 1) / (resolutions[segmentLength] * beatsAmount / 4)
     local length = 1 / (resolutions[segmentLength])
     for i=#trackEvents, 1, -1 do
       --is event under cursor?
@@ -413,7 +429,7 @@ function enc(e, d)
   
   --cursor
   if (e == 2 and not heldKeys[1]) then
-    beatCursor = util.clamp(beatCursor + d, 1, resolutions[segmentLength])
+    beatCursor = util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4)
     screenDirty = true
   end
   
@@ -465,14 +481,14 @@ function key(k, z)
   -- load sample
 	if sampleView and k == 3 and z == 0 then
 	  weLoading = true
-	  print("loading a file")
+	  print("loading a file onto track " .. currentTrack)
 		fileselect.enter(_path.audio,load_file)
 	end
   
   --add and remove events
   if (k == 3 and z == 0 and nowPosition[1] == beatCursor and nowPosition[2] == currentTrack and not sampleView) then
-    local position = (beatCursor - 1) / (resolutions[segmentLength])
-    local length = 1 / (resolutions[segmentLength])
+    local position = (beatCursor - 1) / (resolutions[segmentLength] * beatsAmount / 4)
+    local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
     local track = currentTrack
     local foundOne = 0
     
