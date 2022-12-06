@@ -93,9 +93,17 @@ function init()
   weLoading = false
   --inits
   redraw_clock_id = clock.run(redraw_clock)
+  editArea = {width=120, height=56, border=4}
   --global x and y - tracks and beats to sequence:
   --todo make params
-  tracksAmount = 8
+  tracksAmount = 4
+  function tracksAmount_update(new)
+    tracksAmount = new
+    editArea.trackHeight = editArea.height / tracksAmount
+  end
+  params:add_number("tracksAmount", "Number of Tracks", 1, 8, 4)
+  params:set_action("tracksAmount", function(x) tracksAmount_update(x) end)
+  params:bang()
   currentTrack = 0
   beatsAmount = 8
   totalBeats = 192 * beatsAmount
@@ -107,7 +115,6 @@ function init()
   trackEvents = {}
   currentDynamic = 1.0
   --drawing stuff
-  editArea = {width=120, height=56, border=4}
   editArea.trackHeight = editArea.height / tracksAmount
   heldKeys = {false, false, false}
   nowPosition = {-1, -1}
@@ -118,7 +125,7 @@ function init()
   tick = 1
   -- offset for entire track +- in 192ths
   trackTiming = {}
-  for i=1, tracksAmount, 1 do trackTiming[i] = 0 end
+  for i=1, 8, 1 do trackTiming[i] = 0 end
   sampleView = false
   softcut.event_render(copy_samples)
   waveform = {}
@@ -188,8 +195,8 @@ function load_file(file)
     softcut.buffer_read_mono(file, 0, currentTrack, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
     softcut.render_buffer(1,currentTrack,1,editArea.width + 1)
-    weLoading = false
   end
+  weLoading = false
 end
 
 function drawEvents()
