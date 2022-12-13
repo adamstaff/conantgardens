@@ -42,6 +42,15 @@ function copy_samples(ch, start, interval, samples)
   waveform.isLoaded[currentTrack + 1] = true
 end
 
+function loadPattern()
+  trackEvents = tab.load(_path.data.."/conantgardens/beat01.txt")
+end
+
+function savePattern()
+  tab.save(trackEvents,_path.data.."/conantgardens/beat01.txt")
+end
+
+
 --tick along, play events
 function ticker()
   while isPlaying do
@@ -49,7 +58,7 @@ function ticker()
     if (clockPosition > totalBeats) then clockPosition = 0 end
     --check if it's time for an event
     for i, data in ipairs(trackEvents) do
-      if (data[1] ~= nil and data[2] ~= nil and data[3] ~= nil and data[4] ~=nil) then
+      if (data[4] ~=nil) then
         --offset by track offset
         local localTick = clockPosition - trackTiming[data[3]+1]
         --check we're not out of bounds
@@ -69,7 +78,7 @@ function ticker()
     clockPosition = clockPosition + tick
     --wait
     clock.sync(1/192)
-    if clockPosition % 12 == 0 then screenDirty = true end
+    if clockPosition % 16 == 0 then screenDirty = true end
   end
 end
 
@@ -96,7 +105,7 @@ function init()
   editArea = {width=120, height=56, border=4}
   --global x and y - tracks and beats to sequence:
   --todo make params
-  tracksAmount = 4
+  tracksAmount = 8
   function tracksAmount_update(new)
     tracksAmount = new
     editArea.trackHeight = editArea.height / tracksAmount
@@ -129,7 +138,7 @@ function init()
   isPlaying = false
   weMoving = false
   weMoved = false
-  movingEvent = -1
+  movingEvents = {}
   weFilling = false
   fillStart = nil
   fillEnd = nil
@@ -147,7 +156,7 @@ function init()
   waveform.channels = {}
   waveform.length = {}
   waveform.rate = {}
-  for i=1, tracksAmount, 1 do
+  for i=1, 8, 1 do
     waveform.isLoaded[i] = false 
     --waveform.samples[i] = {}
     --waveform.channels[i] = 0
@@ -162,7 +171,7 @@ function init()
   softcut.buffer_clear()
   -- read file into buffer
   -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
-  for i=0, tracksAmount - 1, 1 do
+  for i=0, 7, 1 do
     --local ch, length, rate = audio.file_info(file[i])
     --local lengthInS = length * (1 / rate)
     --if lengthInS > 1 then lengthInS = 1 end
@@ -465,7 +474,9 @@ function enc(e, d)
   
   --if we're holding k3 to move
   if weMoving then
-    moveEvent(movingEvent,e,d)
+    for i=#movingEvents, 1, -1 do
+      moveEvent(i,e,d)
+    end
     screenDirty = true
   end
 
@@ -517,11 +528,11 @@ function key(k, z)
         if (finish > position and position >= trackEvents[i][1] and currentTrack == trackEvents[i][3]) then
           --yes
           weMoving = true
-          movingEvent = i
-          --else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
-          --  weMoving = true
-          --  movingEvent = i
-          --end
+          table.insert(movingEvents,i)
+          else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
+            weMoving = true
+            table.insert(movingEvents,i)
+          end
         end
       end
     end
@@ -553,7 +564,10 @@ function key(k, z)
   if (k == 3 and z == 0 and not sampleView) then
     if not weMoved then addRemoveEvents() end
     weMoving = false
-    if weMoved then weMoved = false end
+    if weMoved then 
+      weMoved = false
+      movingEvents = {}
+    end
   end
 
 end
