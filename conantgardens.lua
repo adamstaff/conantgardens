@@ -101,12 +101,20 @@ function init()
     tracksAmount = new
     editArea.trackHeight = editArea.height / tracksAmount
   end
-  params:add_number("tracksAmount", "Number of Tracks", 1, 8, 4)
-  params:set_action("tracksAmount", function(x) tracksAmount_update(x) end)
-  params:bang()
-  currentTrack = 0
   beatsAmount = 8
   totalBeats = 192 * beatsAmount
+  --params
+  params:add_separator("Conant Gardens")
+  params:add_number("tracksAmount", "Number of Tracks", 1, 8, 4)
+  params:set_action("tracksAmount", function(x) tracksAmount_update(x) end)
+  params:add_number("beatsAmount", "Number of Beats", 1, 32, 8)
+  params:set_action("beatsAmount", function(x)
+      beatsAmount = x
+      totalBeats = 192 * beatsAmount
+    end)
+  params:bang()
+  --end params
+  currentTrack = 0
   --start with cursor set to 8th notes:
   segmentLength = 6
   resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
@@ -120,6 +128,11 @@ function init()
   nowPosition = {-1, -1}
   isPlaying = false
   weMoving = false
+  weMoved = false
+  movingEvent = -1
+  weFilling = false
+  fillStart = nil
+  fillEnd = nil
   theClock = clock.run(ticker)
   clockPosition = 0
   tick = 1
@@ -203,9 +216,9 @@ function drawEvents()
 --draws a bright box for each of the events in trackEvents, so you can see what you're doing!
   for i, data in ipairs(trackEvents) do
     if (data[1] ~= nil and data[2] ~= nil and data[3] ~= nil and data[4] ~= nil) then
-      local x = editArea.border + math.floor(0.5 + editArea.width * data[1])
+      local x = editArea.border + math.floor(editArea.width * data[1])
       local y = editArea.border + data[3] * editArea.trackHeight 
-      local w = math.floor(0.5 + editArea.width * data[2])
+      local w = math.floor(editArea.width * data[2])
       local h = editArea.trackHeight
       local dynamic = math.floor(data[4] * 15)
       screen.level(dynamic)
@@ -216,6 +229,34 @@ function drawEvents()
       screen.rect(x, y, 1, h)
       screen.fill()
     end
+  end
+end
+
+function addRemoveEvents()
+  local barFraction = beatsAmount / 4
+  local position = (beatCursor - 1) / (resolutions[segmentLength] * barFraction)
+  local length = 1 / (resolutions[segmentLength] * barFraction)
+  local track = currentTrack
+  local foundOne = 0
+  
+  --check for clashes, and delete event
+  -- structure: [position, length, track, dynamic] 
+  if #trackEvents > 0 then
+    for i=#trackEvents, 1, -1 do
+      if (trackEvents[i][4] ~= nil and position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
+        table.remove(trackEvents[i])
+        foundOne = 1
+        else if (trackEvents[i][4] ~= nil and trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
+          table.remove(trackEvents[i])
+          foundOne = 1
+        end
+      end
+    end
+    screenDirty = true
+  end
+  if (foundOne == 0 and not weMoving) then
+    table.insert(trackEvents, {position, length, track, currentDynamic})
+    screenDirty = true
   end
 end
 
@@ -230,17 +271,17 @@ function drawSequencer()
   screen.rect(editArea.border, editArea.border + editArea.trackHeight * currentTrack, editArea.width, editArea.trackHeight)
   --time select
   screen.rect(
-    editArea.border + ((beatCursor - 1) * (editArea.width / (resolutions[segmentLength] * (beatsAmount / 4)))),
+    editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
     editArea.border,
-    math.max(editArea.width / resolutions[segmentLength] * (beatsAmount / 16),1),
+    (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]),
     editArea.height)
   screen.fill()
   --crossover, where track and time selections meet
   screen.level(6)
   screen.rect(
-    editArea.border + ((beatCursor - 1) * (editArea.width / resolutions[segmentLength] * (beatsAmount / 16))),
+    editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
     editArea.border + editArea.trackHeight * currentTrack,
-    math.max(editArea.width / resolutions[segmentLength] * (beatsAmount / 16),1),
+    (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]),
     editArea.trackHeight)
   screen.fill()
   --events
@@ -286,12 +327,17 @@ function drawSequencer()
       -- swap page
       screen.move(0, 62)
       screen.text("spl")
+      if weMoving then
+        screen.move(18, 62)
+        screen.text("holding")
+      end
     end
   end
 
   --what track
   screen.move(107,5)
   screen.text("trk " .. currentTrack + 1)
+  
 end
 
 function drawSampler()
@@ -358,20 +404,27 @@ function redraw()
 end
 
 function moveEvent(i,e,d)
---takes event number, encoder num and turn amount, and moves events
-    if (e == 1) then
-    --move event to a different track
-      trackEvents[i][3] = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+--takes event number, encoder number and turn amount, and moves events
+  if (e == 1) then
+  --move event to a different track
+    local movedTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+    trackEvents[i][3] = movedTrack
+    weMoved = true
+  end
+  if (e == 2) then
+  -- move in time
+    local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
+    --at some point,an algo for 'is there an event in the way'
+    -- will it go out of bounds?
+    if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
+      trackEvents[i][1] = trackEvents[i][1] + d * length
+      weMoved = true
     end
-    if (e == 2) then
-    -- move in time
-      local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
-      --at some point,an algo for 'is there an event in the way'
-      -- will it go out of bounds?
-      if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
-        trackEvents[i][1] = trackEvents[i][1] + d * length
-      end
-    end
+  end
+end
+
+function doFill(s,e)
+  print("wouldfill. start: "..s..". End: "..e)
 end
 
 function enc(e, d)
@@ -391,15 +444,17 @@ function enc(e, d)
         currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
         for i=#trackEvents, 1, -1 do
         --is event under cursor?
-          if currentTrack == trackEvents[i][3] then
-            if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2]) then
-              --yes
-              currentDynamic = trackEvents[i][4]
-              trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-            else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
-              currentDynamic = trackEvents[i][4]
-              trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-            end
+          if trackEvents[i][4] ~= nil then
+            if currentTrack == trackEvents[i][3] then
+              if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2]) then
+                --yes
+                currentDynamic = trackEvents[i][4]
+                trackEvents[i][4] = util.clamp(currentDynamic + d/10, 0.1, 1.0)
+              else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
+                currentDynamic = trackEvents[i][4]
+                trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+              end
+              end
             end
           end
         end
@@ -409,20 +464,8 @@ function enc(e, d)
   end
   
   --if we're holding k3 to move
-  if (heldKeys[3] == true) then
-    weMoving = true
-    local position = (beatCursor - 1) / (resolutions[segmentLength] * beatsAmount / 4)
-    local length = 1 / (resolutions[segmentLength])
-    for i=#trackEvents, 1, -1 do
-      --is event under cursor?
-      if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
-        --yes
-        moveEvent(i,e,d)
-        else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
-          moveEvent(i,e,d)
-        end
-      end
-    end
+  if weMoving then
+    moveEvent(movingEvent,e,d)
     screenDirty = true
   end
 
@@ -434,7 +477,7 @@ function enc(e, d)
   
   --cursor
   if (e == 2 and not heldKeys[1]) then
-    beatCursor = util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4)
+    beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
     screenDirty = true
   end
   
@@ -442,18 +485,18 @@ function enc(e, d)
   if (e == 3 and not heldKeys[1] and not heldKeys[3]) then
     local beatCursorThen = (beatCursor - 1) / resolutions[segmentLength]
     
-    segmentLength = util.clamp(segmentLength + d, 1, #resolutions)
+    segmentLength = util.clamp(segmentLength - d, 1, #resolutions)
 
     -- round up beatCursor
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
     screenDirty = true
   end
   
-  if sampleView or not isPlaying then
-    screenDirty = true
-  end
+  --if sampleView or not isPlaying then
+    --screenDirty = true
+  --end
 
-  screenDirty = true
+  --screenDirty = true
 
 end
 
@@ -462,9 +505,26 @@ function key(k, z)
   heldKeys[k] = z == 1
   
   -- holding k3 to move events
-  if (k == 3 and z == 1 and not sampleView) then
+  if (heldKeys[3] and not sampleView) then
     nowPosition[1] = beatCursor
     nowPosition[2] = currentTrack
+    local position = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
+    local length = 1 / resolutions[segmentLength]
+    for i=#trackEvents, 1, -1 do
+      --is event under cursor?
+      if trackEvents[i][4] ~= nil then
+        local finish = trackEvents[i][1] + trackEvents[i][2]
+        if (finish > position and position >= trackEvents[i][1] and currentTrack == trackEvents[i][3]) then
+          --yes
+          weMoving = true
+          movingEvent = i
+          --else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
+          --  weMoving = true
+          --  movingEvent = i
+          --end
+        end
+      end
+    end
   end
 
   --play/stop
@@ -490,32 +550,10 @@ function key(k, z)
 		fileselect.enter(_path.audio,load_file)
 	end
   
-  --add and remove events
-  if (k == 3 and z == 0 and nowPosition[1] == beatCursor and nowPosition[2] == currentTrack and not sampleView) then
-    local position = (beatCursor - 1) / (resolutions[segmentLength] * beatsAmount / 4)
-    local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
-    local track = currentTrack
-    local foundOne = 0
-    
-    --check for clashes, and delete event
-    if (#trackEvents > 0 and trackEvents[1][1] ~= nil) then
-      for i=#trackEvents, 1, -1 do
-        if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3] and not weMoving) then
-          table.remove(trackEvents[i])
-          foundOne = 1
-          else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3] and not weMoving) then
-            table.remove(trackEvents[i])
-            foundOne = 1
-          end
-        end
-      end
-      screenDirty = true
-    end
-    if (foundOne == 0 and not weMoving) then
-      table.insert(trackEvents, {position, length, track, currentDynamic})
-      screenDirty = true
-    end
+  if (k == 3 and z == 0 and not sampleView) then
+    if not weMoved then addRemoveEvents() end
     weMoving = false
+    if weMoved then weMoved = false end
   end
 
 end
