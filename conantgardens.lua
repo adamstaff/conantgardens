@@ -231,6 +231,12 @@ function drawEvents()
       local h = editArea.trackHeight
       local dynamic = math.floor(data[4] * 15)
       screen.level(dynamic)
+      --check whether the current event index is being moved, and if so, MAKE IT BLACK
+      for j=#movingEvents, 1, -1 do
+        if movingEvents[j] == i then
+          screen.level(1)
+        end
+      end
       screen.rect(x, y, w, h)
       screen.fill() 
       -- plus a nice little line for the onset
@@ -417,9 +423,7 @@ function moveEvent(i,e,d)
   if (e == 1) then
   --move event to a different track
     local movedTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
-    for i=#movingEvents, 1, -1 do
-      trackEvents[movingEvents[i]][3] = movedTrack
-    end
+    trackEvents[i][3] = movedTrack
     weMoved = true
   end
   if (e == 2) then
@@ -427,12 +431,10 @@ function moveEvent(i,e,d)
     local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
     --at some point,an algo for 'is there an event in the way'
     -- will it go out of bounds?
-    for i=#movingEvents, 1, -1 do
-      j = movingEvents[i]
-      if (trackEvents[j][1] + trackEvents[j][2] + d * length <= 1 and trackEvents[j][1] + d * length >= 0) then
-        trackEvents[j][1] = trackEvents[j][1] + d * length
-        weMoved = true  
-      end
+    if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
+      --offset position in time by the cursor length
+      trackEvents[i][1] = trackEvents[i][1] + d * length
+      weMoved = true  
     end
   end
 end
@@ -478,9 +480,9 @@ function enc(e, d)
   end
   
   --if we're holding k3 to move
-  if weMoving then
+  if weMoving and #movingEvents > 0 then
     for i=#movingEvents, 1, -1 do
-      moveEvent(i,e,d)
+      moveEvent(movingEvents[i],e,d)
     end
     screenDirty = true
   end
