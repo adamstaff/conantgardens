@@ -58,12 +58,13 @@ function ticker()
     if (clockPosition > totalBeats) then clockPosition = 0 end
     --check if it's time for an event
     for i, data in ipairs(trackEvents) do
+      --if there's an event to check
       if (data[4] ~=nil) then
-        --offset by track offset
+        --offset track playhead position by track offset
         local localTick = clockPosition - trackTiming[data[3]+1]
         --check we're not out of bounds
-        if localTick > totalBeats then localTick = 0 + trackTiming[data[3]+1]
-        else if localTick < 0 then localTick = totalBeats + trackTiming[data[3]+1] end 
+        if localTick > totalBeats then localTick = 0 - trackTiming[data[3]+1]
+        else if localTick < 0 then localTick = totalBeats - trackTiming[data[3]+1] end
         end
         --finally, play an event?
         if (localTick == math.floor(totalBeats * (data[1]))) then
@@ -178,6 +179,7 @@ function init()
     --waveform.length[i] = lengthInS
     --load file into buffer
     --softcut.buffer_read_mono(file[i],0,i,waveform.length[i],1,1)
+    print("setting up softcut voice "..i)
     -- enable voices
     softcut.enable(i,1)
     -- set voices to buffer 1
@@ -187,9 +189,11 @@ function init()
     -- voices disable loop
     softcut.loop(i,0)
     softcut.loop_start(i,i)
-    softcut.loop_end(i,i+0.2)
-    -- set voices rate to 1.0
+    softcut.loop_end(i,i+0.99)
+    softcut.position(i,i)
+    -- set voices rate to 1.0 and no fade
     softcut.rate(i,1.0)
+    softcut.fade_time(i,0)
     -- disable voices play
     softcut.play(i,0)
   end
@@ -282,7 +286,7 @@ function drawSequencer()
   screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
   screen.fill()
   --track sel
-  screen.level(4)
+  screen.level(2)
   screen.rect(editArea.border, editArea.border + editArea.trackHeight * currentTrack, editArea.width, editArea.trackHeight)
   --time select
   screen.rect(
@@ -301,10 +305,31 @@ function drawSequencer()
   screen.fill()
   --events
   drawEvents()
+  --a bright line around the selection
+  if not heldKeys[1] then
+    screen.level(15)
+    screen.rect(
+      editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
+      editArea.border + editArea.trackHeight * currentTrack,
+      (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) + 0.5,
+      editArea.trackHeight + 1
+    )
+    screen.stroke()
+  end
   --play head line, position updated by and taken from ticker() 
-  screen.level(0)
-  screen.rect(editArea.border + (clockPosition / totalBeats) * editArea.width, editArea.border, 1, editArea.height)
-  screen.fill()
+  local playheadX = editArea.border + (clockPosition / totalBeats) * editArea.width
+  screen.level(15)
+  screen.move(playheadX, 0)
+  screen.line(playheadX, editArea.border)
+  screen.move(playheadX, editArea.border + editArea.height)
+  screen.line(playheadX, 64)
+  screen.stroke()
+  screen.level(3)
+  for i=1, tracksAmount, 1 do
+    screen.move(playheadX - trackTiming[i] / 12, editArea.border + editArea.trackHeight * (i-1))
+    screen.line(playheadX - trackTiming[i] / 12, editArea.border + editArea.trackHeight * (i))
+  end
+  screen.stroke()
   
   --guides, little dots to demarcate bar lines and track lines
   screen.level(0)
@@ -321,7 +346,7 @@ function drawSequencer()
     screen.move(0, 62)
     if isPlaying then screen.text("stop") else screen.text("play") end
     for i=1, tracksAmount, 1 do
-      screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i], editArea.border + i * editArea.trackHeight -1)
+      screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i] / 8, editArea.border + i * editArea.trackHeight -1)
       if trackTiming[i] > 0 then
         screen.text("+"..trackTiming[i])
       else screen.text(trackTiming[i]) end
@@ -542,7 +567,6 @@ function key(k, z)
         if (currentTrack == trackEvents[i][3] and selectposition < eventEnd and selectposition >= trackEvents[i][1]) then
           --yes
           weMoving = true
-          print("added event number "..i.." to movingEvents")
           table.insert(movingEvents,i)
           else if (currentTrack == trackEvents[i][3] and trackEvents[i][1] >= selectposition and trackEvents[i][1] < selectposition + selectlength) then
             weMoving = true
@@ -572,7 +596,7 @@ function key(k, z)
   -- load sample
 	if sampleView and k == 3 and z == 0 then
 	  weLoading = true
-	  print("loading a file onto track " .. currentTrack )
+	  print("loading a file onto track " .. currentTrack + 1)
 		fileselect.enter(_path.audio,load_file)
 	end
   
