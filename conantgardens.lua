@@ -67,10 +67,10 @@ function ticker()
         end
         --finally, play an event?
         if (localTick == math.floor(totalBeats * (data[1]))) then
-          softcut.position(data[3],data[3])
+          softcut.position(data[3]+1,data[3]+1)
           --set dynamic level
-          softcut.level(data[3],data[4])
-          softcut.play(data[3],1)
+          softcut.level(data[3]+1,data[4])
+          softcut.play(data[3]+1,1)
         end
       end
     end
@@ -171,7 +171,7 @@ function init()
   softcut.buffer_clear()
   -- read file into buffer
   -- buffer_read_mono (file, start_src, start_dst, dur, ch_src, ch_dst)
-  for i=0, 7, 1 do
+  for i=1, 8, 1 do
     --local ch, length, rate = audio.file_info(file[i])
     --local lengthInS = length * (1 / rate)
     --if lengthInS > 1 then lengthInS = 1 end
@@ -212,11 +212,11 @@ function load_file(file)
     if lengthInS > 1 then lengthInS = 1 end
     waveform.length[currentTrack] = lengthInS
     -- erase section of buffer
-    softcut.buffer_clear_region(currentTrack, 1, 0, 0)
+    softcut.buffer_clear_region(currentTrack+1, 1, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
-    softcut.buffer_read_mono(file, 0, currentTrack, lengthInS, 1, 1, 0)
+    softcut.buffer_read_mono(file, 0, currentTrack+1, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
-    softcut.render_buffer(1,currentTrack,1,editArea.width + 1)
+    softcut.render_buffer(1,currentTrack+1,1,editArea.width + 1)
   end
   weLoading = false
 end
@@ -224,7 +224,7 @@ end
 function drawEvents()
 --draws a bright box for each of the events in trackEvents, so you can see what you're doing!
   for i, data in ipairs(trackEvents) do
-    if (data[1] ~= nil and data[2] ~= nil and data[3] ~= nil and data[4] ~= nil) then
+    if (data[4] ~= nil and data[3] < tracksAmount) then
       local x = editArea.border + math.floor(editArea.width * data[1])
       local y = editArea.border + data[3] * editArea.trackHeight 
       local w = math.floor(editArea.width * data[2])
@@ -417,7 +417,9 @@ function moveEvent(i,e,d)
   if (e == 1) then
   --move event to a different track
     local movedTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
-    trackEvents[i][3] = movedTrack
+    for i=#movingEvents, 1, -1 do
+      trackEvents[movingEvents[i]][3] = movedTrack
+    end
     weMoved = true
   end
   if (e == 2) then
@@ -425,9 +427,12 @@ function moveEvent(i,e,d)
     local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
     --at some point,an algo for 'is there an event in the way'
     -- will it go out of bounds?
-    if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
-      trackEvents[i][1] = trackEvents[i][1] + d * length
-      weMoved = true
+    for i=#movingEvents, 1, -1 do
+      j = movingEvents[i]
+      if (trackEvents[j][1] + trackEvents[j][2] + d * length <= 1 and trackEvents[j][1] + d * length >= 0) then
+        trackEvents[j][1] = trackEvents[j][1] + d * length
+        weMoved = true  
+      end
     end
   end
 end
@@ -517,19 +522,27 @@ function key(k, z)
   
   -- holding k3 to move events
   if (heldKeys[3] and not sampleView) then
+    --store initial position to check that we actually move something. Because if we don't, we'll add/remove an event
     nowPosition[1] = beatCursor
     nowPosition[2] = currentTrack
-    local position = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
-    local length = 1 / resolutions[segmentLength]
+
+    --store decimal values for the cursor start/end (event positions are stored decimally)
+    local selectposition = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
+    local selectlength = 1 / (resolutions[segmentLength] * (beatsAmount / 4)) - (1/192)
+    if selectlength < 1/192 then selectlength = 1/192 end
+
+    --look through all the track events to see whether each one is under the cursor, and add the event index to a table if so
     for i=#trackEvents, 1, -1 do
-      --is event under cursor?
+      --if the event hasn't been deleted
       if trackEvents[i][4] ~= nil then
-        local finish = trackEvents[i][1] + trackEvents[i][2]
-        if (finish > position and position >= trackEvents[i][1] and currentTrack == trackEvents[i][3]) then
+        --store a friendly event end point
+        local eventEnd = trackEvents[i][1] + trackEvents[i][2]
+        if (currentTrack == trackEvents[i][3] and selectposition < eventEnd and selectposition >= trackEvents[i][1]) then
           --yes
           weMoving = true
+          print("added event number "..i.." to movingEvents")
           table.insert(movingEvents,i)
-          else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
+          else if (currentTrack == trackEvents[i][3] and trackEvents[i][1] >= selectposition and trackEvents[i][1] < selectposition + selectlength) then
             weMoving = true
             table.insert(movingEvents,i)
           end
