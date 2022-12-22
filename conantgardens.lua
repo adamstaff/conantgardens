@@ -42,6 +42,7 @@ function copy_samples(ch, start, interval, samples)
   waveform.isLoaded[currentTrack + 1] = true
 end
 
+--todo: add this functionality to params - ie 'save session'
 function loadPattern()
   trackEvents = tab.load(_path.data.."/conantgardens/beat01.txt")
 end
@@ -93,30 +94,21 @@ function redraw_clock() ----- a clock that draws space
   end
 end
 
-function sleeper()
-  clock.sleep(1)
-  weIniting = false
-end
-
 function init()
-  --weIniting = true
-  weLoading = false
-  --inits
-  redraw_clock_id = clock.run(redraw_clock)
-  editArea = {width=120, height=56, border=4}
-  --global x and y - tracks and beats to sequence:
-  --todo make params
-  tracksAmount = 8
-  function tracksAmount_update(new)
-    tracksAmount = new
-    editArea.trackHeight = editArea.height / tracksAmount
-  end
-  beatsAmount = 8
-  totalBeats = 192 * beatsAmount
+  redraw_clock_id = clock.run(redraw_clock) --add these for other clocks so we can kill them at the end
+
+  editArea = {width=120, height=56, border=4} -- the overall draw window size. Should not exceed 128 x 64!
+
   --params
+  tracksAmount = 0 -- number of tracks to play
+  beatsAmount = 0 -- number of beats to sequence
+  totalBeats = 0 -- number of ticks for the sequencer clock
   params:add_separator("Conant Gardens")
   params:add_number("tracksAmount", "Number of Tracks", 1, 8, 4)
-  params:set_action("tracksAmount", function(x) tracksAmount_update(x) end)
+  params:set_action("tracksAmount",   function tracksAmount_update(x)
+    tracksAmount = x
+    editArea.trackHeight = editArea.height / tracksAmount
+  end)
   params:add_number("beatsAmount", "Number of Beats", 1, 32, 8)
   params:set_action("beatsAmount", function(x)
       beatsAmount = x
@@ -124,34 +116,36 @@ function init()
     end)
   params:bang()
   --end params
+
   currentTrack = 0
   --start with cursor set to 8th notes:
-  segmentLength = 6
+  segmentLength = 6 -- index to read from resolutions, i.e. resolutions[segmentLength]
   resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
-  beatCursor = 1
-  -- structure: [position, length, track, dynamic] 
+  beatCursor = 1 -- initial X position of cursor
+
+  -- structure: [position, length, track, dynamic, file] 
   trackEvents = {}
-  currentDynamic = 1.0
+  currentDynamic = 1.0 -- initial dynamic for adding events
+
   --drawing stuff
-  editArea.trackHeight = editArea.height / tracksAmount
+  editArea.trackHeight = editArea.height / tracksAmount -- is this redunant because of line 110?
   heldKeys = {false, false, false}
-  nowPosition = {-1, -1}
-  isPlaying = false
-  weMoving = false
-  weMoved = false
-  movingEvents = {}
-  weFilling = false
-  fillStart = nil
-  fillEnd = nil
-  theClock = clock.run(ticker)
-  clockPosition = 0
-  tick = 1
-  -- offset for entire track +- in 192ths
-  trackTiming = {}
-  for i=1, 8, 1 do trackTiming[i] = 0 end
-  sampleView = false
-  softcut.event_render(copy_samples)
-  waveform = {}
+  nowPosition = {-1, -1} -- for storing where the cursor is
+  isPlaying = false -- are we playing right now?
+  weMoving = false -- are we moving an event right now?
+  weMoved = false -- did we move an event while moving the cusor?
+  movingEvents = {} -- list of events we're moving right now
+  weFilling = false -- are we filling an area with events?
+  fillBounds = {nil, nil} -- bounds for filling: start, end
+  weLoading = false -- stops the UI from being drawn when loading a file
+  theClock = clock.run(ticker) -- sequencer clock
+  clockPosition = 0 -- sequencer position right now. Updated by function 'ticker'
+  tick = 1 -- how much to increment each tick. Guess it could be used for double time?
+  trackTiming = {}  -- offset for entire track +- in 192ths
+  for i=1, 8, 1 do trackTiming[i] = 0 end -- programmatically fill trackTiming
+  sampleView = false -- are we looking at samples?
+  softcut.event_render(copy_samples) -- what to do when we request waveform samples from softcut
+  waveform = {} -- waveform information, used when loading a file
   waveform.isLoaded = {}
   waveform.samples = {}
   waveform.channels = {}
@@ -612,5 +606,5 @@ function key(k, z)
 end
 
 function cleanup() --------------- cleanup() is automatically called on script close
-  clock.cancel(redraw_clock_id) -- melt our clock vie the id we noted
+  clock.cancel(redraw_clock_id) -- melt our clock via the id we noted
 end
