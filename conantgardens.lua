@@ -54,29 +54,23 @@ end
 --tick along, play events
 function ticker()
   while isPlaying do
-    --loop clock
-    if (clockPosition > totalBeats) then clockPosition = 0 end
-    --check if it's time for an event
-    for i, data in ipairs(trackEvents) do
+    if (clockPosition > totalBeats) then clockPosition = 0 end  --loop clock
+    for i, data in ipairs(trackEvents) do     --check if it's time for an event
       if (data[4] ~=nil) then --if there's an event to check
-        --offset track playhead position by track offset
-        local localTick = clockPosition - trackTiming[data[3]+1]
-        --check we're not out of bounds
-        if localTick > totalBeats then localTick = 0 - trackTiming[data[3]+1]
+        local localTick = clockPosition - trackTiming[data[3]+1]  --offset track playhead position by track offset
+        if localTick > totalBeats then localTick = 0 - trackTiming[data[3]+1]   --check we're not out of bounds
         else if localTick < 0 then localTick = totalBeats - trackTiming[data[3]+1] end
         end
-        --finally, play an event?
-        if (localTick == math.floor(totalBeats * (data[1]))) then
-          softcut.position(data[3]+1,data[3]+1)
-          --set dynamic level and play
-          softcut.level(data[3]+1,data[4])
-          softcut.play(data[3]+1,1)
+        if (localTick == math.floor(totalBeats * (data[1]))) then  --finally, play an event?
+          softcut.position(data[3]+1,data[3]+1) -- put the voice playhead in the right place
+          softcut.level(data[3]+1,data[4])  --set dynamic level
+          softcut.play(data[3]+1,1) -- play
         end
       end
     end
+    if clockPosition % 16 == 0 then screenDirty = true end -- redraw screen every x ticks
     clockPosition = clockPosition + tick -- move to next clock position
     clock.sync(1/192) -- and wait
-    if clockPosition % 16 == 0 then screenDirty = true end -- redraw screen every x ticks
   end
 end
 
@@ -115,17 +109,16 @@ function init()
   --end params
 
   currentTrack = 0
-  --start with cursor set to 8th notes:
-  segmentLength = 6 -- index to read from resolutions, i.e. resolutions[segmentLength]
-  resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
-  beatCursor = 1 -- initial X position of cursor
+  segmentLength = 6   --start with cursor set to 8th notes:
+  resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192} -- index to read from resolutions, i.e. resolutions[segmentLength]
+  beatCursor = 1 -- initial x position of cursor
 
   trackEvents = {} -- structure: [position, length, track, dynamic, file] 
   currentDynamic = 1.0 -- initial dynamic for adding events
 
   --drawing stuff
-  editArea.trackHeight = editArea.height / tracksAmount -- is this redunant because of line 110?
-  heldKeys = {false, false, false}
+  editArea.trackHeight = editArea.height / tracksAmount -- is this redunant because of params?
+  heldKeys = {false, false, false} -- are we holding any keys?
   nowPosition = {-1, -1} -- for storing where the cursor is
   isPlaying = false -- are we playing right now?
   weMoving = false -- are we moving an event right now?
@@ -196,14 +189,11 @@ end
 -- loading a file handler: sets waveform information, softcut voice settings
 function load_file(file)
   if file ~= "cancel" then
-    --get file info
-    local ch, length, rate = audio.file_info(file)
-    --get length and limit to 1s
-    local lengthInS = length * (1 / rate)
+    local ch, length, rate = audio.file_info(file)     --get file info
+    local lengthInS = length * (1 / rate)    --get length and limit to 1s
     if lengthInS > 1 then lengthInS = 1 end
     waveform.length[currentTrack] = lengthInS
-    -- erase section of buffer
-    softcut.buffer_clear_region(currentTrack+1, 1, 0, 0)
+    softcut.buffer_clear_region(currentTrack+1, 1, 0, 0)    -- erase section of buffer
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, currentTrack+1, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
@@ -216,7 +206,7 @@ end
 function drawEvents()
   for i, data in ipairs(trackEvents) do -- check each event in trackEvents
     if (data[4] ~= nil and data[3] < tracksAmount) then -- if data exists, and is within tracksAmount
-      -- set local, human-readable variables
+      -- set some local, human-readable variables
       local x = editArea.border + math.floor(editArea.width * data[1])
       local y = editArea.border + data[3] * editArea.trackHeight 
       local w = math.floor(editArea.width * data[2])
@@ -245,7 +235,6 @@ function addRemoveEvents()
   local barFraction = beatsAmount / 4 --how many groups of four beats do we have?
   local position = (beatCursor - 1) / (resolutions[segmentLength] * barFraction) -- how far through the edit window in bars are we?
   local length = 1 / (resolutions[segmentLength] * barFraction) -- how wide is the cursor?
-  local track = currentTrack
   local foundOne = false -- initially, we haven't grabbed anything yet
   
   --check for clashes, and delete event
@@ -265,7 +254,7 @@ function addRemoveEvents()
     end
   end
   if (not foundOne and not weMoving) then -- if we didn't delete and aren't moving
-    table.insert(trackEvents, {position, length, track, currentDynamic}) -- insert create a new event
+    table.insert(trackEvents, {position, length, currentTrack, currentDynamic}) -- insert a new event
     screenDirty = true
   end
 end
@@ -273,7 +262,7 @@ end
 -- draws the sequencer view
 function drawSequencer()
   -- SQUARES etc.
-  --a dim background
+  	--a dim background
   screen.level(1)
   screen.rect(editArea.border, editArea.border, editArea.width, editArea.height)
   screen.fill()
@@ -288,13 +277,13 @@ function drawSequencer()
     editArea.height)
   screen.fill()
   --crossover, where track and time selections meet
-  screen.level(6)
-  screen.rect(
-    editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
-    editArea.border + editArea.trackHeight * currentTrack,
-    (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]),
-    editArea.trackHeight)
-  screen.fill()
+  --screen.level(6)
+  --screen.rect(
+  --  editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
+  --  editArea.border + editArea.trackHeight * currentTrack,
+  --  (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]),
+  --  editArea.trackHeight)
+  --screen.fill()
   --events
   drawEvents()
   --a bright line around the selection
@@ -333,7 +322,7 @@ function drawSequencer()
   screen.fill()
   
   -- TEXT
-  if heldKeys[1] then -- if we've got K1 held, to shift
+  if heldKeys[1] then -- if we've got K1 held to shift
     screen.level(8)
     screen.move(0, 62) -- move to where K2 is
     if isPlaying then screen.text("stop") else screen.text("play") end
@@ -345,30 +334,25 @@ function drawSequencer()
       screen.move(116, 63)
       screen.text(currentDynamic)
     end
-    else do -- if we're not holding K1 to shift
+  else do -- if we're not holding K1 to shift
       -- cursor position
       screen.level(15)
       screen.move(80, 63)
-      screen.text(beatCursor)
-      -- a '/'
+      screen.text(beatCursor)      -- which beat we're on
       screen.move(98,63)
-      screen.text("/")
-      -- cursor length
+      screen.text("/")       -- a '/'
       screen.move(116, 63)
-      screen.text(resolutions[segmentLength])
-      -- swap page display for K2
+      screen.text(resolutions[segmentLength])      -- cursor length, e.g. an eighth note
       screen.move(0, 62)
-      screen.text("spl")
+      screen.text("spl")      -- swap page display for K2
       if weMoving then
         screen.move(18, 62)
         screen.text("holding")
       end
     end
   end
-
-  -- what track we on?
   screen.move(107,5)
-  screen.text("trk " .. currentTrack + 1)
+  screen.text("trk " .. currentTrack + 1)   -- what track we on?
   
 end
 
@@ -390,9 +374,10 @@ function drawSampler()
     screen.text_center("K3 to load sample")
   end
   -- TEXT
+  -- above K3
   screen.move(20,62)
   screen.text("load")
---  screen.fill() -- redundant??
+  --  screen.fill() -- redundant??
   screen.level(15)
   --track label
   screen.move(107,5)
@@ -406,6 +391,7 @@ end
 function redraw()
   screen.clear()
 
+  -- decide which view to draw, and draw it
   if sampleView then drawSampler()
   else drawSequencer() end
   
@@ -424,8 +410,8 @@ function redraw()
   screen.update()
 end
 
+--takes event number, encoder number and turn amount, and moves an event. called by ...
 function moveEvent(i,e,d)
---takes event number, encoder number and turn amount, and moves events
   if (e == 1) then
   --move event to a different track
     local movedTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
@@ -435,7 +421,7 @@ function moveEvent(i,e,d)
   if (e == 2) then
   -- move in time
     local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
-    --at some point,an algo for 'is there an event in the way'
+    -- TODO at some point,an algo for 'is there an event in the way'
     -- will it go out of bounds?
     if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
       --offset position in time by the cursor length
@@ -445,47 +431,45 @@ function moveEvent(i,e,d)
   end
 end
 
+-- TODO takes a start and end bounds, and fills it with notes of length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
 function doFill(s,e)
   print("wouldfill. start: "..s..". End: "..e)
 end
 
 function enc(e, d)
-  --SHIFTING??
-  if (heldKeys[1]) then
+  if (heldKeys[1]) then   --SHIFTING??
     if sampleView then
-      --sample view shift behaviour
-    else
-      if (e == 2) then
-        trackTiming[currentTrack +1] = trackTiming[currentTrack +1] + d
-        screenDirty = true
-      end
-      if (e == 3) then
-        -- test for position, adjust note dynamic
-        local position = (beatCursor - 1) / (resolutions[segmentLength])
-        local length = 1 / (resolutions[segmentLength])
-        currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-        for i=#trackEvents, 1, -1 do
-        --is event under cursor?
-          if trackEvents[i][4] ~= nil then
-            if currentTrack == trackEvents[i][3] then
-              if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2]) then
-                --yes
-                currentDynamic = trackEvents[i][4]
-                trackEvents[i][4] = util.clamp(currentDynamic + d/10, 0.1, 1.0)
-              else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
-                currentDynamic = trackEvents[i][4]
-                trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-              end
+      --sample view shift behaviour, currently nothing
+    else if (e == 2) then -- shift behaviour in sequencer view
+      trackTiming[currentTrack +1] = trackTiming[currentTrack +1] + d -- adjust track timing
+      screenDirty = true
+    end
+    if (e == 3) then    -- test for position, adjust note dynamic
+      local position = (beatCursor - 1) / (resolutions[segmentLength])
+      local length = 1 / (resolutions[segmentLength])
+      currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
+      for i=#trackEvents, 1, -1 do
+      --is event under cursor?
+        if trackEvents[i][4] ~= nil then
+          if currentTrack == trackEvents[i][3] then
+            if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2]) then
+              --yes
+              currentDynamic = trackEvents[i][4]
+              trackEvents[i][4] = util.clamp(currentDynamic + d/10, 0.1, 1.0)
+            else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
+              currentDynamic = trackEvents[i][4]
+              trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
               end
             end
           end
         end
-        screenDirty = true
+      end
+      screenDirty = true
       end
     end
   end
   
-  --if we're holding k3 to move
+  --if we're holding k3, move events
   if weMoving and #movingEvents > 0 then
     for i=#movingEvents, 1, -1 do
       moveEvent(movingEvents[i],e,d)
@@ -493,62 +477,51 @@ function enc(e, d)
     screenDirty = true
   end
 
-  --track select
+  --move cursor between tracks
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
     screenDirty = true
   end
   
-  --cursor
+  -- move cursor in time
   if (e == 2 and not heldKeys[1]) then
     beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
     screenDirty = true
   end
   
-  --segment Length
+  --adjust segment Length
   if (e == 3 and not heldKeys[1] and not heldKeys[3]) then
     local beatCursorThen = (beatCursor - 1) / resolutions[segmentLength]
-    
     segmentLength = util.clamp(segmentLength - d, 1, #resolutions)
-
     -- round up beatCursor
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
     screenDirty = true
   end
-  
-  --if sampleView or not isPlaying then
-    --screenDirty = true
-  --end
-
-  --screenDirty = true
 
 end
 
 function key(k, z)
   
-  heldKeys[k] = z == 1
+  heldKeys[k] = z == 1 -- store if we're holding any keys
   
-  -- holding k3 to move events
+  -- check if there are events under the cursor, and if so add them to a list (movingEvents) so they can be moved when the encoder is called
   if (heldKeys[3] and not sampleView) then
-    --store initial position to check that we actually move something. Because if we don't, we'll add/remove an event
+    --store initial position to check that we actually move something. if we don't end up moving the cursor, we will add/remove an event
     nowPosition[1] = beatCursor
     nowPosition[2] = currentTrack
 
-    --store decimal values for the cursor start/end (event positions are stored decimally)
+    --calculate decimal values for the cursor start/end (event positions are stored as 0-1.)
     local selectposition = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
     local selectlength = 1 / (resolutions[segmentLength] * (beatsAmount / 4)) - (1/192)
     if selectlength < 1/192 then selectlength = 1/192 end
 
     --look through all the track events to see whether each one is under the cursor, and add the event index to a table if so
     for i=#trackEvents, 1, -1 do
-      --if the event hasn't been deleted
-      if trackEvents[i][4] ~= nil then
-        --store a friendly event end point
-        local eventEnd = trackEvents[i][1] + trackEvents[i][2]
-        if (currentTrack == trackEvents[i][3] and selectposition < eventEnd and selectposition >= trackEvents[i][1]) then
-          --yes
+      if trackEvents[i][4] ~= nil then      --if the event hasn't been deleted
+        local eventEnd = trackEvents[i][1] + trackEvents[i][2]        --store a friendly event end point
+        if (currentTrack == trackEvents[i][3] and selectposition < eventEnd and selectposition >= trackEvents[i][1]) then --is under cursor
           weMoving = true
-          table.insert(movingEvents,i)
+          table.insert(movingEvents,i) -- store the index of the event
           else if (currentTrack == trackEvents[i][3] and trackEvents[i][1] >= selectposition and trackEvents[i][1] < selectposition + selectlength) then
             weMoving = true
             table.insert(movingEvents,i)
@@ -560,13 +533,13 @@ function key(k, z)
 
   --play/stop
   if (heldKeys[1] and k == 2 and z == 0) then
-    if (isPlaying) then
+    if isPlaying then
       isPlaying = false
       clockPosition = 0
       screenDirty = true
     else
       isPlaying = true
-      clock.run(ticker)
+      clock.run(ticker) -- need to call this every time? hmm
     end
   else if (k == 2 and z == 0) then 
     sampleView = not sampleView 
@@ -578,13 +551,13 @@ function key(k, z)
 	if sampleView and k == 3 and z == 0 then
 	  weLoading = true
 	  print("loading a file onto track " .. currentTrack + 1)
-		fileselect.enter(_path.audio,load_file)
+		fileselect.enter(_path.audio,load_file) -- starts the fileselect function, taking screen control and eventually passing a file location
 	end
   
   if (k == 3 and z == 0 and not sampleView) then
-    if not weMoved then addRemoveEvents() end
+    if not weMoved then addRemoveEvents() end -- a simple press of K3, we add or remove event(s) under the cursor
     weMoving = false
-    if weMoved then 
+    if weMoved then -- when we release K3, reset the conditions for moving events:
       weMoved = false
       movingEvents = {}
     end
@@ -594,4 +567,5 @@ end
 
 function cleanup() --------------- cleanup() is automatically called on script close
   clock.cancel(redraw_clock_id) -- melt our clock via the id we noted
+  -- should we melt the ticker clock too?
 end
