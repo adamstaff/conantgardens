@@ -397,7 +397,7 @@ function redraw()
   
   --a play/stop icon, to visualise play state
   screen.level(10)
-  if (isPlaying == true) then
+  if isPlaying then
     screen.move(0,0)
     screen.line(0,4)
     screen.line(4,2)
