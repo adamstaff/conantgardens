@@ -228,7 +228,7 @@ end
 
 function load_file(file,track)
   if file ~= "cancel" then
-    print("loading a file on track "..currentTrack=..": "..file)
+    print("loading a file on track "..currentTrack+1 ..": "..file)
     --get file info
     local ch, length, rate = audio.file_info(file)
     --get length and limit to 1s
@@ -244,7 +244,7 @@ function load_file(file,track)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
     softcut.render_buffer(1,currentTrack+1,1,editArea.width + 1)
     --update param
-    
+    params:set("sample_"..currentTrack+1,file,0)
   end
   weLoading = false
 end
