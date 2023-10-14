@@ -49,6 +49,14 @@ function init_params()
   params:add_number('beatsAmount', 'Number of Beats', 1, 16, 8)
   params:set_action('beatsAmount', function(x) beatsAmount = x
     totalBeats = 192*beatsAmount end )
+  params:add_group('track_timings', 'track timings', 8)
+  for i=1, 8, 1 do
+    params:add_number('trackTiming_'..i, 'track timing '..i)
+--[[    params:set_action('trackTiming_'..i, function(x)
+        trackTiming[i] = x
+      end
+    )]]
+  end
   params:add_group('track_samples', 'track samples', 8)
   for i=1, 8, 1 do
     currentTrack = i-1
@@ -65,7 +73,22 @@ function init_params()
       end
     }
   end
-  
+  -- here, we set our PSET callbacks for save / load:
+  params.action_write = function(filename,name,number)
+    os.execute("mkdir -p "..norns.state.data.."/"..number.."/")
+    tab.save(trackEvents,norns.state.data.."/"..number.."/notes.data")
+    print("finished writing '"..filename.."'", number)
+  end
+  params.action_read = function(filename,silent,number)
+    trackEvents = note_data -- send this restored table to the sequins
+    note_data = tab.load(norns.state.data.."/"..number.."/notes.data")
+    noteEvents = note_data -- send this restored table to the sequins
+    print("finished reading '"..filename.."'", number)
+  end
+  params.action_delete = function(filename,name,number)
+    norns.system_cmd("rm -r "..norns.state.data.."/"..number.."/")
+    print("finished deleting '"..filename, number)
+  end
   params:bang()
 end
 
