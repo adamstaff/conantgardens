@@ -65,6 +65,7 @@ function init_params()
       end
     }
   end
+  
   params:bang()
 end
 
@@ -227,19 +228,23 @@ end
 
 function load_file(file,track)
   if file ~= "cancel" then
-    print("loading a file on track "..currentTrack)
+    print("loading a file on track "..currentTrack=..": "..file)
     --get file info
     local ch, length, rate = audio.file_info(file)
     --get length and limit to 1s
     local lengthInS = length * (1 / rate)
     if lengthInS > 1 then lengthInS = 1 end
-    waveform.length[currentTrack] = lengthInS
+    if waveform then
+      waveform.length[currentTrack] = lengthInS
+    end
     -- erase section of buffer
     softcut.buffer_clear_region(currentTrack+1, 1, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, currentTrack+1, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
     softcut.render_buffer(1,currentTrack+1,1,editArea.width + 1)
+    --update param
+    
   end
   weLoading = false
 end
