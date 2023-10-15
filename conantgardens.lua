@@ -113,7 +113,7 @@ function ticker()
         else if localTick < 0 then localTick = totalBeats - params:get('trackTiming_'..data[3]+1) end
         end
         --finally, play an event?
-        if (localTick == math.floor(totalBeats * (data[1]))) then
+        if (localTick == math.floor(totalBeats * (data[1]))) and not data[3]+1 > tracksAmount then
         --todo add option for MIDI here --
           softcut.position(data[3]+1,data[3]+1)
           --set dynamic level
