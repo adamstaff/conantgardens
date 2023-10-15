@@ -258,7 +258,7 @@ function load_file(file,track)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, currentTrack+1, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
-    softcut.render_buffer(1,currentTrack+1,1,editArea.width + 1)
+    softcut.render_buffer(1,currentTrack+1,lengthInS,editArea.width + 1)
     --update param
     params:set("sample_"..currentTrack+1,file,0)
   end
