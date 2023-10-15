@@ -113,7 +113,7 @@ function ticker()
         else if localTick < 0 then localTick = totalBeats - params:get('trackTiming_'..data[3]+1) end
         end
         --finally, play an event?
-        if (localTick == math.floor(totalBeats * (data[1]))) and not data[3]+1 > tracksAmount then
+        if (localTick == math.floor(totalBeats * (data[1]))) and data[3]+1 <= tracksAmount then
         --todo add option for MIDI here --
           softcut.position(data[3]+1,data[3]+1)
           --set dynamic level
@@ -159,6 +159,7 @@ function init()
   end
   beatsAmount = 8
   totalBeats = 192 * beatsAmount
+  trackEvents = {}
   --params
   init_params()
   --end params
@@ -386,9 +387,9 @@ function drawSequencer()
     if isPlaying then screen.text("stop") else screen.text("play") end
     for i=1, tracksAmount, 1 do
       screen.move(editArea.border - 2 + editArea.width / 2 + params:get('trackTiming_'..i) / 8, editArea.border + i * editArea.trackHeight -1)
-      if params:get('trackTiming_'..i > 0 then
-        screen.text("+"..params:get('trackTiming_'..i)
-      else screen.text(params:get('trackTiming_'..i) end
+      if params:get('trackTiming_'..i) > 0 then
+        screen.text("+"..params:get('trackTiming_'..i))
+      else screen.text(params:get('trackTiming_'..i)) end
       screen.move(116, 63)
       screen.text(currentDynamic)
     end
@@ -514,7 +515,7 @@ function enc(e, d)
       --sample view shift behaviour
     else
       if (e == 2) then
-        params:set('trackTiming_'..currentTrack + 1) = params:get('trackTiming_'..currentTrack + 1) + d
+        params:set('trackTiming_'..currentTrack + 1, params:get('trackTiming_'..currentTrack + 1) + d)
         screenDirty = true
       end
       if (e == 3) then
