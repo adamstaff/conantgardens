@@ -44,18 +44,14 @@ end
 
 function init_params()
   params:add_separator('Conant Gardens')
-  params:add_number('tracksAmount', 'Number of Tracks', 1, 8, 4)
+  params:add_number('tracksAmount', 'number of tracks', 1, 8, 4)
   params:set_action('tracksAmount', tracksAmount_update)
-  params:add_number('beatsAmount', 'Number of Beats', 1, 16, 8)
+  params:add_number('beatsAmount', 'number of beats', 1, 16, 8)
   params:set_action('beatsAmount', function(x) beatsAmount = x
     totalBeats = 192*beatsAmount end )
   params:add_group('track_timings', 'track timings', 8)
   for i=1, 8, 1 do
     params:add_number('trackTiming_'..i, 'track timing '..i)
---[[    params:set_action('trackTiming_'..i, function(x)
-        trackTiming[i] = x
-      end
-    )]]
   end
   params:add_group('track_samples', 'track samples', 8)
   for i=1, 8, 1 do
@@ -91,7 +87,7 @@ function init_params()
   end
   params:bang()
 end
-
+--[[
 function loadPattern()
   trackEvents = tab.load(_path.data.."/conantgardens/beat01.txt")
 end
@@ -99,7 +95,7 @@ end
 function savePattern()
   tab.save(trackEvents,_path.data.."/conantgardens/beat01.txt")
 end
-
+]]
 
 --tick along, play events
 function ticker()
@@ -111,13 +107,14 @@ function ticker()
       --if there's an event to check
       if (data[4] ~=nil) then
         --offset track playhead position by track offset
-        local localTick = clockPosition - trackTiming[data[3]+1]
+        local localTick = clockPosition - params:get('trackTiming_'..data[3]+1)
         --check we're not out of bounds
-        if localTick > totalBeats then localTick = 0 - trackTiming[data[3]+1]
-        else if localTick < 0 then localTick = totalBeats - trackTiming[data[3]+1] end
+        if localTick > totalBeats then localTick = 0 - params:get('trackTiming_'..data[3]+1)
+        else if localTick < 0 then localTick = totalBeats - params:get('trackTiming_'..data[3]+1) end
         end
         --finally, play an event?
         if (localTick == math.floor(totalBeats * (data[1]))) then
+        --todo add option for MIDI here --
           softcut.position(data[3]+1,data[3]+1)
           --set dynamic level
           softcut.level(data[3]+1,data[4])
@@ -155,7 +152,6 @@ function init()
   redraw_clock_id = clock.run(redraw_clock)
   editArea = {width=120, height=56, border=4}
   --global x and y - tracks and beats to sequence:
-  --todo make params
   tracksAmount = 8
   function tracksAmount_update(new)
     tracksAmount = new
@@ -171,8 +167,6 @@ function init()
   segmentLength = 6
   resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
   beatCursor = 1
-  -- structure: [position, length, track, dynamic] 
-  trackEvents = {}
   currentDynamic = 1.0
   --drawing stuff
   editArea.trackHeight = editArea.height / tracksAmount
@@ -189,8 +183,6 @@ function init()
   clockPosition = 0
   tick = 1
   -- offset for entire track +- in 192ths
-  trackTiming = {}
-  for i=1, 8, 1 do trackTiming[i] = 0 end
   sampleView = false
   softcut.event_render(copy_samples)
   waveform = {}
@@ -373,8 +365,8 @@ function drawSequencer()
   screen.stroke()
   screen.level(3)
   for i=1, tracksAmount, 1 do
-    screen.move(playheadX - trackTiming[i] / 12, editArea.border + editArea.trackHeight * (i-1))
-    screen.line(playheadX - trackTiming[i] / 12, editArea.border + editArea.trackHeight * (i))
+    screen.move(playheadX - params:get('trackTiming_'..i) / 12, editArea.border + editArea.trackHeight * (i-1))
+    screen.line(playheadX - params:get('trackTiming_'..i) / 12, editArea.border + editArea.trackHeight * (i))
   end
   screen.stroke()
   
@@ -393,10 +385,10 @@ function drawSequencer()
     screen.move(0, 62)
     if isPlaying then screen.text("stop") else screen.text("play") end
     for i=1, tracksAmount, 1 do
-      screen.move(editArea.border - 2 + editArea.width / 2 + trackTiming[i] / 8, editArea.border + i * editArea.trackHeight -1)
-      if trackTiming[i] > 0 then
-        screen.text("+"..trackTiming[i])
-      else screen.text(trackTiming[i]) end
+      screen.move(editArea.border - 2 + editArea.width / 2 + params:get('trackTiming_'..i) / 8, editArea.border + i * editArea.trackHeight -1)
+      if params:get('trackTiming_'..i > 0 then
+        screen.text("+"..params:get('trackTiming_'..i)
+      else screen.text(params:get('trackTiming_'..i) end
       screen.move(116, 63)
       screen.text(currentDynamic)
     end
@@ -522,7 +514,7 @@ function enc(e, d)
       --sample view shift behaviour
     else
       if (e == 2) then
-        trackTiming[currentTrack +1] = trackTiming[currentTrack +1] + d
+        params:set('trackTiming_'..currentTrack + 1) = params:get('trackTiming_'..currentTrack + 1) + d
         screenDirty = true
       end
       if (e == 3) then
