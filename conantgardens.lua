@@ -69,6 +69,11 @@ function init_params()
       end
     }
   end
+  -- for sample start/end points
+  for i=1, 8, 1 do
+  	params:add_number('sampStart_'..i,0.0,0.99,0.0)
+  	params:add_number('sampEnd_'..i,0.0,1.0,1.0)
+  end
   -- here, we set our PSET callbacks for save / load:
   params.action_write = function(filename,name,number)
     os.execute("mkdir -p "..norns.state.data.."/"..number.."/")
@@ -253,12 +258,15 @@ function load_file(file,track)
     if waveform then
       waveform.length[currentTrack] = lengthInS
     end
-    -- erase section of buffer
+    -- erase section of buffer -- required?
     softcut.buffer_clear_region(currentTrack+1, 1, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, currentTrack+1, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
-    softcut.render_buffer(1,currentTrack+1,lengthInS,editArea.width + 1)
+    softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1),editArea.width + 1)
+    --set start/end play positions
+    softcut.loop_start(currentTrack+1,currentTrack+1 + params:get('sampStart_'..currentTrack+1))
+    softcut.loop_end(currentTrack+1,currentTrack+1 + params:get('sampEnd_'..currentTrack+1))
     --update param
     params:set("sample_"..currentTrack+1,file,0)
   end
@@ -513,6 +521,14 @@ function enc(e, d)
   if (heldKeys[1]) then
     if sampleView then
       --sample view shift behaviour
+      if e == 2 then
+        print('changing samples start on '..currentTrack+1 .." by "..d/50)
+  	    params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/50))
+  	    
+      end
+      if e == 3 then
+--		softcut.loop_end(currentTrack+1,currentTrack+1+0.99)
+      end
     else
       if (e == 2) then
         params:set('trackTiming_'..currentTrack + 1, params:get('trackTiming_'..currentTrack + 1) + d)
