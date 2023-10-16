@@ -18,7 +18,7 @@
 -- shift+E1: 
 -- shift+E2: Track timing
 -- shift+E3: Note dynamic
--- shift+K2:
+-- shift+K2: Play/Stop
 -- shift+K3: Fill notes
 --
 -- In Sample View
@@ -33,11 +33,11 @@ util = require "util"
 fileselect = require "fileselect"
 
 function copy_samples(ch, start, interval, samples)
-  print("rendering a single track samples for track " .. currentTrack + 1)
+  print("rendering sample for track " .. currentTrack + 1)
   for i = 1, editArea.width, 1 do
     waveform.samples[i + currentTrack * editArea.width] = samples[i]
   end
-  print("done rendering waveforms")
+  print("done")
   screenDirty = true
   waveform.isLoaded[currentTrack + 1] = true
 end
@@ -62,7 +62,7 @@ function init_params()
       id = "sample_"..i,
       name = "sample "..i,
       path = _path.audio,
-      action = function(file) 
+      action = function(file)
         weLoading = true
 	      print("loading a file onto track " .. currentTrack + 1)
         load_file(file)
@@ -74,6 +74,7 @@ params:group('sample_starts_ends', 'sample starts/ends', 16)
   for i=1, 8, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
+params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, 1 - x) end
   end
   -- here, we set our PSET callbacks for save / load:
   params.action_write = function(filename,name,number)
@@ -121,9 +122,11 @@ function ticker()
         --finally, play an event?
         if (localTick == math.floor(totalBeats * (data[1]))) and data[3]+1 <= tracksAmount then
         --todo add option for MIDI here --
-          softcut.position(data[3]+1,data[3]+1)
+-- put the playhead in position (voice, position)
+    softcut.position(data[3]+1,data[3]+1 + params:get('sampStart_'.. data[3]+1))
           --set dynamic level
           softcut.level(data[3]+1,data[4])
+-- play from position to softcut.loop_end
           softcut.play(data[3]+1,1)
         end
       end
