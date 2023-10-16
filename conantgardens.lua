@@ -69,10 +69,11 @@ function init_params()
       end
     }
   end
+params:group('sample_starts_ends', 'sample starts/ends', 16)
   -- for sample start/end points
   for i=1, 8, 1 do
-  	params:add_number('sampStart_'..i,0.0,0.99,0.0)
-  	params:add_number('sampEnd_'..i,0.0,1.0,1.0)
+  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
+  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
   end
   -- here, we set our PSET callbacks for save / load:
   params.action_write = function(filename,name,number)
