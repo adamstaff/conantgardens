@@ -528,11 +528,12 @@ function enc(e, d)
       if e == 2 then
         print('changing samples start on '..currentTrack+1 .." by "..d/50)
   	    params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/50))
-  	    
+   softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1),editArea.width + 1)   
       end
       if e == 3 then
 --		softcut.loop_end(currentTrack+1,currentTrack+1+0.99)
-      end
+    softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1),editArea.width + 1)
+    end
     else
       if (e == 2) then
         params:set('trackTiming_'..currentTrack + 1, params:get('trackTiming_'..currentTrack + 1) + d)
