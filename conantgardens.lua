@@ -33,11 +33,9 @@ util = require "util"
 fileselect = require "fileselect"
 
 function copy_samples(ch, start, interval, samples)
-  print("rendering sample for track " .. currentTrack + 1)
   for i = 1, editArea.width, 1 do
     waveform.samples[i + currentTrack * editArea.width] = samples[i]
   end
-  print("done")
   screenDirty = true
   waveform.isLoaded[currentTrack + 1] = true
 end
@@ -64,17 +62,17 @@ function init_params()
       path = _path.audio,
       action = function(file)
         weLoading = true
-	      print("loading a file onto track " .. currentTrack + 1)
-        load_file(file)
+        load_file(file, i)
       end
     }
   end
-params:group('sample_starts_ends', 'sample starts/ends', 16)
+   
+params:add_group('sample_starts_ends', 'sample starts/ends', 16)
   -- for sample start/end points
   for i=1, 8, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
-params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, 1 - x) end
+params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack+1 + x) end)
   end
   -- here, we set our PSET callbacks for save / load:
   params.action_write = function(filename,name,number)
@@ -83,11 +81,10 @@ params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, 1 - x) end
     print("finished writing '"..filename.."'", number)
   end
   params.action_read = function(filename,silent,number)
-    trackEvents = note_data -- send this restored table to the sequins
     note_data = tab.load(norns.state.data.."/"..number.."/notes.data")
-    noteEvents = note_data -- send this restored table to the sequins
+    trackEvents = note_data -- send this restored table to the sequins
     print("finished reading '"..filename.."'", number)
-  end
+  end 
   params.action_delete = function(filename,name,number)
     norns.system_cmd("rm -r "..norns.state.data.."/"..number.."/")
     print("finished deleting '"..filename, number)
@@ -223,7 +220,6 @@ function init()
     --waveform.length[i] = lengthInS
     --load file into buffer
     --softcut.buffer_read_mono(file[i],0,i,waveform.length[i],1,1)
-    print("setting up softcut voice "..i)
     -- enable voices
     softcut.enable(i,1)
     -- set voices to buffer 1
@@ -253,26 +249,27 @@ end
 
 function load_file(file,track)
   if file ~= "cancel" then
-    print("loading a file on track "..currentTrack+1 ..": "..file)
+    if not track then track = currentTrack + 1 end
+    print("loading a file on track "..track ..": "..file)
     --get file info
     local ch, length, rate = audio.file_info(file)
     --get length and limit to 1s
     local lengthInS = length * (1 / rate)
     if lengthInS > 1 then lengthInS = 1 end
     if waveform then
-      waveform.length[currentTrack] = lengthInS
+      waveform.length[track-1] = lengthInS
     end
     -- erase section of buffer -- required?
-    softcut.buffer_clear_region(currentTrack+1, 1, 0, 0)
+    softcut.buffer_clear_region(track, 1, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
-    softcut.buffer_read_mono(file, 0, currentTrack+1, lengthInS, 1, 1, 0)
+    softcut.buffer_read_mono(file, 0, track, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
-    softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1),editArea.width + 1)
+    softcut.render_buffer(1,track + params:get('sampStart_'..track), params:get('sampEnd_'..track), editArea.width + 1)
     --set start/end play positions
-    softcut.loop_start(currentTrack+1,currentTrack+1 + params:get('sampStart_'..currentTrack+1))
-    softcut.loop_end(currentTrack+1,currentTrack+1 + params:get('sampEnd_'..currentTrack+1))
+    softcut.loop_start(track,track + params:get('sampStart_'..track))
+    softcut.loop_end(track,track + params:get('sampEnd_'..track))
     --update param
-    params:set("sample_"..currentTrack+1,file,0)
+    params:set("sample_"..track,file,0)
   end
   weLoading = false
 end
@@ -526,13 +523,13 @@ function enc(e, d)
     if sampleView then
       --sample view shift behaviour
       if e == 2 then
-        print('changing samples start on '..currentTrack+1 .." by "..d/50)
-  	    params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/50))
-   softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1),editArea.width + 1)   
+  	    params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/100))
+   softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)   
       end
       if e == 3 then
 --		softcut.loop_end(currentTrack+1,currentTrack+1+0.99)
-    softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1),editArea.width + 1)
+    params:set('sampEnd_'.. currentTrack+1, params:get('sampEnd_'.. currentTrack+1) + (d/100))
+    softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
     end
     else
       if (e == 2) then
