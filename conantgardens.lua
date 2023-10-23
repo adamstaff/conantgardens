@@ -42,7 +42,7 @@ function init_params()
     totalTicks = 192*beatsAmount end )
   params:add_group('track_volumes', 'track volumes', 8)
   for i=1, 8, 1 do
-    params:add_number('trackVolume_'..i, 'track volume '..i, 0,1,1, function(param) return (20 * math.log10(param:get()) .."dB") end)
+    params:add_number('trackVolume_'..i, 'track volume '..i, -96,6,0, function(param) return param:get() .."dB" end)
   end
   params:add_group('track_timings', 'track timings', 8)
   for i=1, 8, 1 do
@@ -53,7 +53,7 @@ function init_params()
   for i=1, 8, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
-	params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack+1 + x) end)
+	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack+1 + x) end)
   end
   params:add_group('track_samples', 'track samples', 8)
   -- sample file locations
@@ -96,7 +96,6 @@ function init()
   editArea = {width=120, height=56, border=4}
   --global x and y - tracks and beats to sequence:
   tracksAmount = 8
-  currentTrack = 0
   editArea.trackHeight = editArea.height / tracksAmount
   beatsAmount = 8
   totalTicks = 192 * beatsAmount
@@ -108,7 +107,6 @@ function init()
   resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
   beatCursor = 1
   currentDynamic = 1.0
-  
   heldKeys = {false, false, false}
   nowPosition = {-1, -1}
   isPlaying = false
@@ -158,6 +156,8 @@ function init()
   clockPosition = 0
   tick = 1
   theClock = clock.run(ticker)
+  
+  currentTrack = 0
   
   screenDirty = true
 
@@ -218,7 +218,7 @@ function ticker()
 					-- put the playhead in position (voice, position)
     			softcut.position(data[3]+1,data[3]+1 + params:get('sampStart_'.. data[3]+1))
           --set dynamic level
-          softcut.level(data[3]+1,data[4] * params:get('trackVolume_'..data[3]+1))
+          softcut.level(data[3]+1,data[4] * 10^(params:get('trackVolume_'..data[3]+1) / 20))
 					-- play from position to softcut.loop_end
           softcut.play(data[3]+1,1)
         end
@@ -422,6 +422,9 @@ function drawSampler()
   --"seq"
   screen.move(0,62)
   screen.text("seq")
+  -- db
+  screen.move(107,62)
+  screen.text(params:get('trackVolume_'..currentTrack+1)..'dB')
 end
 
 function redraw()
@@ -502,17 +505,16 @@ function enc(e, d)
     if sampleView then
       --sample view shift behaviour
       if e == 1 then
-      	
+      	params:set('trackVolume_'..currentTrack+1, params:get('trackVolume_'..currentTrack+1) + d)
       end
       if e == 2 then
-  	    params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/100))
-   softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)   
+        params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/1000))
+        softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
       end
       if e == 3 then
---		softcut.loop_end(currentTrack+1,currentTrack+1+0.99)
-    params:set('sampEnd_'.. currentTrack+1, params:get('sampEnd_'.. currentTrack+1) + (d/100))
-    softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
-    end
+        params:set('sampEnd_'..currentTrack+1, params:get('sampEnd_'..currentTrack+1) + (d/1000))
+        softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
+      end
     else
       if (e == 2) then
         params:set('trackTiming_'..currentTrack + 1, params:get('trackTiming_'..currentTrack + 1) + d)
@@ -560,12 +562,20 @@ function enc(e, d)
   
   --cursor
   if (e == 2 and not heldKeys[1]) then
+    if sampleView then
+      params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/100))
+      softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)   
+   end else
     beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
     screenDirty = true
   end
   
   --segment Length
   if (e == 3 and not heldKeys[1] and not heldKeys[3]) then
+    if sampleView then
+      params:set('sampEnd_'.. currentTrack+1, params:get('sampEnd_'.. currentTrack+1) + (d/100))
+      softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1) end
+    else
     local beatCursorThen = (beatCursor - 1) / resolutions[segmentLength]
     
     segmentLength = util.clamp(segmentLength - d, 1, #resolutions)
@@ -574,12 +584,6 @@ function enc(e, d)
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
     screenDirty = true
   end
-  
-  --if sampleView or not isPlaying then
-    --screenDirty = true
-  --end
-
-  --screenDirty = true
 
 end
 
