@@ -42,7 +42,7 @@ function init_params()
     totalTicks = 192*beatsAmount end )
   params:add_group('track_volumes', 'track volumes', 8)
   for i=1, 8, 1 do
-    params:add_number('trackVolume_'..i, 'track volume '..i)
+    params:add_number('trackVolume_'..i, 'track volume '..i, 0,1,1, function(param) return (20 * math.log10(param:get()) .."dB") end)
   end
   params:add_group('track_timings', 'track timings', 8)
   for i=1, 8, 1 do
