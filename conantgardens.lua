@@ -500,7 +500,7 @@ function doFill(s,e)
 end
 
 function enc(e, d)
-  --SHIFTING??
+  --		SHIFTING		--
   if (heldKeys[1]) then
     if sampleView then
       --sample view shift behaviour
@@ -554,6 +554,7 @@ function enc(e, d)
     screenDirty = true
   end
 
+	--		NOT SHIFTING		--
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
