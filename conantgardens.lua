@@ -35,7 +35,7 @@ fileselect = require "fileselect"
 
 function init_params()
   params:add_separator('Conant Gardens')
-  params:add_number('tracksAmount', 'number of tracks', 1, 8, 4)
+  params:add_number('tracksAmount', 'number of tracks', 1, 6, 4)
   params:set_action('tracksAmount', tracksAmount_update)
   params:add_number('beatsAmount', 'number of beats', 1, 16, 8)
   params:set_action('beatsAmount', function(x) beatsAmount = x
@@ -52,6 +52,7 @@ function init_params()
   -- sample start/end points
   for i=1, 8, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
+  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, currentTrack+1 + x) end)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
 	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack+1 + x) end)
   end
@@ -82,6 +83,11 @@ function init_params()
     note_data = tab.load(norns.state.data.."/"..number.."/notes.data")
     trackEvents = note_data -- send this restored table to the sequins
     print("finished reading '"..filename.."'", number)
+    -- reload waveforms
+    for i=1,8,1 do
+      softcut.render_buffer(1, i + params:get('sampStart_'..i), params:get('sampEnd_'..i) - params:get('sampStart_'..i), editArea.width + 1)
+     --waveform.isLoaded[i]=true
+    end
   end 
   params.action_delete = function(filename,name,number)
     norns.system_cmd("rm -r "..norns.state.data.."/"..number.."/")
@@ -94,14 +100,11 @@ function init()
   weLoading = false
   redraw_clock_id = clock.run(redraw_clock)
   editArea = {width=120, height=56, border=4}
-  --global x and y - tracks and beats to sequence:
-  tracksAmount = 8
-  editArea.trackHeight = editArea.height / tracksAmount
-  beatsAmount = 8
-  totalTicks = 192 * beatsAmount
-  trackEvents = {}
-  --params
   init_params()
+  --global x and y - tracks and beats to sequence:
+  editArea.trackHeight = editArea.height / params:get('tracksAmount')
+  totalTicks = 192 * params:get('beatsAmount')
+  trackEvents = {}
   --cursor stuff
   segmentLength = 6
   resolutions = {1,2,3,4,6,8,12,16,24,32,48,64,96,128,192}
@@ -188,7 +191,7 @@ function load_file(file,track)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, track, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (eventually) (channel, start, duration, samples)
-    softcut.render_buffer(1,track + params:get('sampStart_'..track), params:get('sampEnd_'..track), editArea.width + 1)
+    softcut.render_buffer(1,track + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1)
     --set start/end play positions
     softcut.loop_start(track,track + params:get('sampStart_'..track))
     softcut.loop_end(track,track + params:get('sampEnd_'..track))
@@ -500,7 +503,7 @@ function doFill(s,e)
 end
 
 function enc(e, d)
-  --		SHIFTING		--
+  --SHIFTING??
   if (heldKeys[1]) then
     if sampleView then
       --sample view shift behaviour
@@ -554,7 +557,6 @@ function enc(e, d)
     screenDirty = true
   end
 
-	--		NOT SHIFTING		--
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
@@ -566,24 +568,25 @@ function enc(e, d)
     if sampleView then
       params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/100))
       softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)   
-   end else
+    else
     beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
     screenDirty = true
+    end
   end
   
   --segment Length
   if (e == 3 and not heldKeys[1] and not heldKeys[3]) then
     if sampleView then
       params:set('sampEnd_'.. currentTrack+1, params:get('sampEnd_'.. currentTrack+1) + (d/100))
-      softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1) end
+      softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
     else
     local beatCursorThen = (beatCursor - 1) / resolutions[segmentLength]
-    
     segmentLength = util.clamp(segmentLength - d, 1, #resolutions)
 
     -- round up beatCursor
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
     screenDirty = true
+    end
   end
 
 end
