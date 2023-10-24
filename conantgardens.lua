@@ -512,6 +512,13 @@ function moveEvent(i,e,d)
 end
 
 function doFill(s,e)
+  if s>e then
+    local tempS = s
+    print(tempS)
+    print("swapping s and e")
+    s = e
+    e = tempS
+  end
   s=s-1
   e=e-1
   lengthD = 1 / (resolutions[segmentLength] * (beatsAmount / 4))
