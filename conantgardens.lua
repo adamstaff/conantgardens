@@ -42,25 +42,35 @@ function init_params()
   params:add_number('beatsAmount', 'number of beats', 1, 16, 8)
   params:set_action('beatsAmount', function(x) beatsAmount = x
     totalTicks = 192*beatsAmount end )
-  params:add_group('track_volumes', 'track volumes', 8)
-  for i=1, 8, 1 do
+  params:add_group('track_volumes', 'track volumes', 6)
+  for i=1, 6, 1 do
     params:add_number('trackVolume_'..i, 'track volume '..i, -96,6,0, function(param) return param:get() .."dB" end)
   end
-  params:add_group('track_timings', 'track timings', 8)
-  for i=1, 8, 1 do
+  params:add_group('track_pans', 'track pans', 6)
+  for i=1, 6, 1 do
+    params:add_number('trackPan_'..i, 'track pan '..i, -1.0,1.0,0.0, function(param) return param:get() end)
+    params:set_action('trackPan_'..i, function(x) softcut.pan(i,x) end)
+  end
+  params:add_group('track_rates', 'track rates', 6)
+  for i=1, 6, 1 do
+    params:add_number('trackRate_'..i, 'track rate '..i, -10.0,10.0,1.0, function(param) return param:get() .."x" end)
+    params:set_action('trackRate_'..i, function(x) softcut.rate(i,x) end)
+  end
+  params:add_group('track_timings', 'track timings', 6)
+  for i=1, 6, 1 do
     params:add_number('trackTiming_'..i, 'track timing '..i)
   end
-  params:add_group('sample_starts_ends', 'sample starts/ends', 16)
+  params:add_group('sample_starts_ends', 'sample starts/ends', 12)
   -- sample start/end points
-  for i=1, 8, 1 do
+  for i=1, 6, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
   	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, i + x) end)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
 	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, i + x) end)
   end
-  params:add_group('track_samples', 'track samples', 8)
+  params:add_group('track_samples', 'track samples', 6)
   -- sample file locations
-  for i=1, 8, 1 do
+  for i=1, 6, 1 do
     local file = "cancel"
     params:add{
       type = "file",
@@ -136,20 +146,22 @@ function init()
   
   -- clear buffer
   softcut.buffer_clear()
-  for i=1, 8, 1 do
+  for i=1, 6, 1 do
     -- enable voices
     softcut.enable(i,1)
     -- set voices to buffer 1
     softcut.buffer(i,1)
     -- set voices level to 1.0
     softcut.level(i,1.0)
+    softcut.level_slew_time(i,0)
+    softcut.pan(i,0)
     -- voices disable loop
     softcut.loop(i,0)
     softcut.loop_start(i,i)
     softcut.loop_end(i,i+0.99)
     softcut.position(i,i)
     -- set voices rate to 1.0 and no fade
-    softcut.rate(i,1.0)
+    softcut.rate(i, params:get('trackRate_'..i))
     softcut.fade_time(i,0)
     -- disable voices play
     softcut.play(i,0)
@@ -372,14 +384,16 @@ function drawSequencer()
     screen.level(15)
     screen.move(0, 62)
     if isPlaying then screen.text("stop") else screen.text("play") end
+    screen.level(0)
     for i=1, tracksAmount, 1 do
-      screen.move(editArea.border - 2 + editArea.width / 2 + params:get('trackTiming_'..i) / 8, editArea.border + i * editArea.trackHeight -1)
+      screen.move(editArea.border - 2 + editArea.width / 2 + params:get('trackTiming_'..i) / 4, editArea.border + i * editArea.trackHeight -1)
       if params:get('trackTiming_'..i) > 0 then
         screen.text("+"..params:get('trackTiming_'..i))
       else screen.text(params:get('trackTiming_'..i)) end
-      screen.move(116, 63)
-      screen.text(currentDynamic)
     end
+    screen.level(15)
+    screen.move(116, 63)
+    screen.text(currentDynamic)
     screen.move(127,5)
     local tempo = params:get("clock_tempo")
     screen.text_right(tempo.."bpm")
@@ -425,8 +439,6 @@ function drawSampler()
 	   screen.move(64,34)
 	   screen.text_center("K3 to load sample")
 	end
-	screen.move(20,62)
-	screen.text("load")
 	screen.fill()
 	
 	-- text labels
@@ -434,12 +446,21 @@ function drawSampler()
 	--track label
   screen.move(107,5)
   screen.text("trk " .. currentTrack)
-  --"seq"
-  screen.move(0,62)
-  screen.text("seq")
-  -- db
-  screen.move(107,62)
-  screen.text(params:get('trackVolume_'..currentTrack)..'dB')
+  if heldKeys[1] then
+    -- db
+    screen.move(127,62)
+    screen.text_right(params:get('trackVolume_'..currentTrack)..'dB')
+    screen.move(64,62)
+    screen.text_center(util.round(params:get('trackRate_'..currentTrack), 0.01)..'x')
+    screen.move(0,62)
+    screen.text(util.round(params:get('trackPan_'..currentTrack), 0.01))
+  else
+    --"seq"
+    screen.move(0,62)
+    screen.text("seq")
+    screen.move(20,62)
+  	screen.text("load") 
+  end
 end
 
 function redraw()
@@ -534,15 +555,13 @@ function enc(e, d)
     if sampleView then
       --sample view shift behaviour
       if e == 1 then
-      	params:set('trackVolume_'..currentTrack, params:get('trackVolume_'..currentTrack) + d)
+      	params:set('trackPan_'..currentTrack, params:get('trackPan_'..currentTrack) + d/100)
       end
       if e == 2 then
-        params:set('sampStart_'..currentTrack, params:get('sampStart_'..currentTrack) + (d/1000))
-        redraw_sample(currentTrack)
+        params:set('trackRate_'..currentTrack, params:get('trackRate_'..currentTrack) + d / 100)
       end
       if e == 3 then
-        params:set('sampEnd_'..currentTrack, params:get('sampEnd_'..currentTrack) + (d/1000))
-        redraw_sample(currentTrack)
+        params:set('trackVolume_'..currentTrack, params:get('trackVolume_'..currentTrack) + d)
       end
     else
       -- sequence view shift behaviour
@@ -596,7 +615,7 @@ function enc(e, d)
   --cursor
   if (e == 2 and not heldKeys[1]) then
     if sampleView then
-      params:set('sampStart_'..currentTrack, params:get('sampStart_'..currentTrack) + (d/100))
+      params:set('sampStart_'..currentTrack, params:get('sampStart_'..currentTrack) + (d/1000))
       redraw_sample(currentTrack) 
     else
       beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
@@ -610,7 +629,7 @@ function enc(e, d)
   --segment Length
   if (e == 3 and not heldKeys[1] and not heldKeys[3]) then
     if sampleView then
-      params:set('sampEnd_'.. currentTrack, params:get('sampEnd_'.. currentTrack) + (d/100))
+      params:set('sampEnd_'.. currentTrack, params:get('sampEnd_'.. currentTrack) + (d/1000))
       redraw_sample(currentTrack)
     else
     local beatCursorThen = (beatCursor - 1) / resolutions[segmentLength]
