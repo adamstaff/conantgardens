@@ -29,6 +29,8 @@
 -- shift+E1: Sample volume
 -- shift+E2: S.Start fine
 -- shift+E3: S.End fine
+-- shift+K2: Play/Stop
+-- shift+K3: Play sample
 
 util = require "util"
 fileselect = require "fileselect"
@@ -84,9 +86,8 @@ function init_params()
     note_data = tab.load(norns.state.data.."/"..number.."/notes.data")
     trackEvents = note_data -- send this restored table to the sequins
     print("finished reading '"..filename.."'", number)
-    sleeper()
     -- reload waveforms
-    for i=1,8,1 do
+    for i=1, tracksAmount, 1 do
       redraw_sample(i)
     end
   end 
@@ -120,8 +121,7 @@ function init()
   weMoved = false
   movingEvents = {}
   weFilling = false
-  fillStart = nil
-  fillEnd = nil
+  weFilled = false
   sampleView = false
   softcut.event_render(copy_samples)
   waveform = {}
@@ -165,18 +165,19 @@ function init()
 
 end
 
-function copy_samples(ch, start, interval, samples, track)
-  if not track then track = currentTrack end
+function copy_samples(ch, start, length, samples)
+  start = math.floor(start)
   for i = 1, editArea.width, 1 do
-    waveform.samples[i + track * editArea.width] = samples[i]
+    waveform.samples[i + start * editArea.width] = samples[i]
   end
   screenDirty = true
-  waveform.isLoaded[track] = true
+  waveform.isLoaded[start] = true
 end
 
--- hello needs + 1 / - 1??? --
 function redraw_sample(track)
-  softcut.render_buffer(1, track + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1, track)
+  if track then
+    softcut.render_buffer(1, track + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1)
+  end
 end
 
 function load_file(file,track)
@@ -478,8 +479,9 @@ function redraw_clock() ----- a clock that draws space
   end
 end
 
-function sleeper()
-  clock.sleep(1)
+function sleeper(i)
+  if not i then i = 1 end
+  clock.sleep(i)
   weIniting = false
 end
 
@@ -499,13 +501,19 @@ function moveEvent(i,e,d)
     if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
       --offset position in time by the cursor length
       trackEvents[i][1] = trackEvents[i][1] + d * length
-      weMoved = true  
+      weMoved = true
     end
   end
 end
 
 function doFill(s,e)
-  print("wouldfill. start: "..s..". End: "..e)
+  s=s-1
+  e=e-1
+  lengthD = 1 / (resolutions[segmentLength] * (beatsAmount / 4))
+  for i = s, e, 1 do
+    table.insert(trackEvents, {lengthD * i, lengthD, currentTrack, currentDynamic})
+  end
+  screenDirty = true
 end
 
 function enc(e, d)
@@ -560,7 +568,7 @@ function enc(e, d)
   end
   
   --if we're holding k3 to move
-  if weMoving and #movingEvents > 0 then
+  if (weMoving and #movingEvents > 0) then
     for i=#movingEvents, 1, -1 do
       moveEvent(movingEvents[i],e,d)
     end
@@ -579,8 +587,11 @@ function enc(e, d)
       params:set('sampStart_'..currentTrack, params:get('sampStart_'..currentTrack) + (d/100))
       redraw_sample(currentTrack) 
     else
-    beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
-    screenDirty = true
+      beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
+      screenDirty = true
+    end
+    if weFilling then
+      weFilled = true
     end
   end
   
@@ -622,17 +633,14 @@ function key(k, z)
       if trackEvents[i][4] ~= nil then
         --store a friendly event end point
         local eventEnd = trackEvents[i][1] + trackEvents[i][2]
-        if (currentTrack == trackEvents[i][3] and selectposition < eventEnd and selectposition >= trackEvents[i][1]) then
-          --yes
+        if (currentTrack == trackEvents[i][3] and selectposition < eventEnd and selectposition >= trackEvents[i][1]) or (currentTrack == trackEvents[i][3] and trackEvents[i][1] >= selectposition and trackEvents[i][1] < selectposition + selectlength) then
           weMoving = true
           table.insert(movingEvents,i)
-          else if (currentTrack == trackEvents[i][3] and trackEvents[i][1] >= selectposition and trackEvents[i][1] < selectposition + selectlength) then
-            weMoving = true
-            table.insert(movingEvents,i)
-          end
         end
       end
     end
+    weFilling = true
+    fillStart = nowPosition[1]
   end
 
   --play/stop
@@ -654,19 +662,22 @@ function key(k, z)
   -- load sample
 	if sampleView and k == 3 and z == 0 then
 	  weLoading = true
-	  print("loading a file onto track " .. currentTrack.." with K3")
 		fileselect.enter(_path.audio,load_file)
 	end
   
+  --release K3
   if (k == 3 and z == 0 and not sampleView) then
     if not weMoved then addRemoveEvents() end
-    weMoving = false
-    if weMoved then 
-      weMoved = false
+    if weFilled and weFilling then 
+      doFill(nowPosition[1], beatCursor)
+    else
       movingEvents = {}
     end
+    weMoving = false
+    weMoved = false
+    weFilling = false
+    weFilled = false
   end
-
 end
 
 function cleanup() --------------- cleanup() is automatically called on script close
