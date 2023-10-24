@@ -374,6 +374,9 @@ function drawSequencer()
       screen.move(116, 63)
       screen.text(currentDynamic)
     end
+    screen.move(127,5)
+    local tempo = params:get("clock_tempo")
+    screen.text_right(tempo.."bpm")
     else do
       --position
       screen.level(15)
@@ -392,13 +395,11 @@ function drawSequencer()
         screen.move(18, 62)
         screen.text("holding")
       end
+      --what track
+      screen.move(127,5)
+      screen.text_right("trk " .. currentTrack)
     end
   end
-
-  --what track
-  screen.move(107,5)
-  screen.text("trk " .. currentTrack)
-  
 end
 
 function drawSampler()
@@ -524,6 +525,10 @@ function enc(e, d)
         redraw_sample(currentTrack)
       end
     else
+      -- sequence view shift behaviour
+      if e == 1 then
+        params:set("clock_tempo", params:get("clock_tempo") + d)
+      end
       if (e == 2) then
         params:set('trackTiming_'..currentTrack, params:get('trackTiming_'..currentTrack) + d)
         screenDirty = true
