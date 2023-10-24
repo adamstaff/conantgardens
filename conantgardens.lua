@@ -218,6 +218,17 @@ function load_file(file,track)
   weLoading = false
 end
 
+function play(track, level)
+  if not level then level = 1.0 end
+  --todo add option for MIDI here --
+	-- put the playhead in position (voice, position)
+	softcut.position(track, track + params:get('sampStart_'.. track))
+  --set dynamic level
+  softcut.level(track, level * 10^(params:get('trackVolume_'..track) / 20))
+	-- play from position to softcut.loop_end
+  softcut.play(track, 1)
+end
+
 function ticker()
   while isPlaying do
     --loop clock
@@ -234,13 +245,7 @@ function ticker()
         end
         --finally, play an event?
         if (localTick == math.floor(totalTicks * (data[1]))) and data[3] <= tracksAmount then
-	        --todo add option for MIDI here --
-					-- put the playhead in position (voice, position)
-    			softcut.position(data[3],data[3] + params:get('sampStart_'.. data[3]))
-          --set dynamic level
-          softcut.level(data[3],data[4] * 10^(params:get('trackVolume_'..data[3]) / 20))
-					-- play from position to softcut.loop_end
-          softcut.play(data[3],1)
+	        play(data[3], data[4])
         end
       end
     end
@@ -686,16 +691,20 @@ function key(k, z)
       isPlaying = true
       clock.run(ticker)
     end
-  else if (k == 2 and z == 0) then 
-    sampleView = not sampleView 
-    screenDirty = true 
-  end
+    else if (k == 2 and z == 0) then 
+      sampleView = not sampleView 
+      screenDirty = true 
+    end
   end
 
   -- load sample
-	if sampleView and k == 3 and z == 0 then
+	if sampleView and k == 3 and z == 0 and not heldKeys[1] then
 	  weLoading = true
 		fileselect.enter(_path.audio,load_file)
+	end
+	
+	if sampleView and k==3 and z==1 and heldKeys[1] then
+	  play(currentTrack)
 	end
   
   --release K3
