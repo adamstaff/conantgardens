@@ -54,9 +54,9 @@ function init_params()
   -- sample start/end points
   for i=1, 8, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
-  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, currentTrack + x) end)
+  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, i + x) end)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
-	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack + x) end)
+	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, i + x) end)
   end
   params:add_group('track_samples', 'track samples', 8)
   -- sample file locations
@@ -183,7 +183,6 @@ end
 function load_file(file,track)
   if file and file ~= "cancel" then
     if not track then track = currentTrack end
-    print("loading a file on track "..track ..": "..file)
     --get file info
     local ch, length, rate = audio.file_info(file)
     --get length and limit to 1s
@@ -279,7 +278,7 @@ function drawEvents()
 --draws a bright box for each of the events in trackEvents, so you can see what you're doing!
   for i, data in ipairs(trackEvents) do
     if (data[4] ~= nil and data[3] <= tracksAmount) then
-      local x = editArea.border + math.floor(editArea.width * data[1])
+      local x = editArea.border + util.round(editArea.width * data[1], 1)
       local y = editArea.border + (data[3] - 1) * editArea.trackHeight 
       local w = math.floor(editArea.width * data[2])
       local h = editArea.trackHeight
@@ -330,10 +329,16 @@ function drawSequencer()
   --a bright line around the selection
   if not heldKeys[1] then
     screen.level(15)
+    local leftEdge = editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1)
+    local width = (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) + 0.5
+    if weFilling then
+      leftEdge = editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (nowPosition[1] - 1)
+      width = ((editArea.width / beatsAmount) * (4 / resolutions[segmentLength])) * (1 + beatCursor - nowPosition[1])
+    end
     screen.rect(
-      editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
+      leftEdge,
       editArea.border + editArea.trackHeight * (currentTrack - 1),
-      (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) + 0.5,
+      width,
       editArea.trackHeight + 1
     )
     screen.stroke()
@@ -364,7 +369,7 @@ function drawSequencer()
   
   --shifting?
   if heldKeys[1] then
-    screen.level(8)
+    screen.level(15)
     screen.move(0, 62)
     if isPlaying then screen.text("stop") else screen.text("play") end
     for i=1, tracksAmount, 1 do
