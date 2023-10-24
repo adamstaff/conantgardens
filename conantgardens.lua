@@ -639,8 +639,10 @@ function key(k, z)
         end
       end
     end
-    weFilling = true
-    fillStart = nowPosition[1]
+    if not weMoving then
+      weFilling = true
+      fillStart = nowPosition[1]
+    end
   end
 
   --play/stop
