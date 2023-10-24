@@ -6,16 +6,16 @@
 -- Dan Charnas, and 
 -- James Dewitt Yancey
 --
--- E1: Select Track
 -- K1: Hold for shift
 -- K2: Toggle page
 --
 -- In Sequence View:
+-- E1: Select Track
 -- E2: Select position
 -- E3: Select division
 -- K3: Add / remove notes
 -- -- Hold K3 to move notes
--- shift+E1: 
+-- shift+E1: Change tempo
 -- shift+E2: Track timing
 -- shift+E3: Note dynamic
 -- shift+K2: Play/Stop
@@ -27,8 +27,8 @@
 -- E3: Sample end
 -- K3: Load sample
 -- shift+E1: Sample volume
--- shift+E2: Start+end
--- shift+E3:
+-- shift+E2: S.Start fine
+-- shift+E3: S.End fine
 
 util = require "util"
 fileselect = require "fileselect"
@@ -52,14 +52,13 @@ function init_params()
   -- sample start/end points
   for i=1, 8, 1 do
   	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
-  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, currentTrack+1 + x) end)
+  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, currentTrack + x) end)
   	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
-	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack+1 + x) end)
+	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, currentTrack + x) end)
   end
   params:add_group('track_samples', 'track samples', 8)
   -- sample file locations
   for i=1, 8, 1 do
-    currentTrack = i-1
     local file = "cancel"
     params:add{
       type = "file",
@@ -67,8 +66,10 @@ function init_params()
       name = "sample "..i,
       path = _path.audio,
       action = function(file)
-        weLoading = true
-        load_file(file, i)
+        if not weIniting then
+          weLoading = true
+          load_file(file, i)
+        end
       end
     }
   end
@@ -83,10 +84,10 @@ function init_params()
     note_data = tab.load(norns.state.data.."/"..number.."/notes.data")
     trackEvents = note_data -- send this restored table to the sequins
     print("finished reading '"..filename.."'", number)
+    sleeper()
     -- reload waveforms
     for i=1,8,1 do
-      softcut.render_buffer(1, i + params:get('sampStart_'..i), params:get('sampEnd_'..i) - params:get('sampStart_'..i), editArea.width + 1)
-     --waveform.isLoaded[i]=true
+      redraw_sample(i)
     end
   end 
   params.action_delete = function(filename,name,number)
@@ -98,6 +99,8 @@ end
 
 function init()
   weLoading = false
+  weIniting = true
+  currentTrack = 1
   redraw_clock_id = clock.run(redraw_clock)
   editArea = {width=120, height=56, border=4}
   init_params()
@@ -122,14 +125,11 @@ function init()
   sampleView = false
   softcut.event_render(copy_samples)
   waveform = {}
-  waveform.isLoaded = {}
+  waveform.isLoaded = {false, false, false, false, false, false, false, false}
   waveform.samples = {}
   waveform.channels = {}
   waveform.length = {}
   waveform.rate = {}
-  for i=1, 8, 1 do
-    waveform.isLoaded[i] = false 
-  end
   
   --add samples
   file = {}
@@ -159,24 +159,29 @@ function init()
   clockPosition = 0
   tick = 1
   theClock = clock.run(ticker)
-  
-  currentTrack = 0
-  
+
+  weIniting = false
   screenDirty = true
 
 end
 
-function copy_samples(ch, start, interval, samples)
+function copy_samples(ch, start, interval, samples, track)
+  if not track then track = currentTrack end
   for i = 1, editArea.width, 1 do
-    waveform.samples[i + currentTrack * editArea.width] = samples[i]
+    waveform.samples[i + track * editArea.width] = samples[i]
   end
   screenDirty = true
-  waveform.isLoaded[currentTrack + 1] = true
+  waveform.isLoaded[track] = true
+end
+
+-- hello needs + 1 / - 1??? --
+function redraw_sample(track)
+  softcut.render_buffer(1, track + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1, track)
 end
 
 function load_file(file,track)
-  if file ~= "cancel" then
-    if not track then track = currentTrack + 1 end
+  if file and file ~= "cancel" then
+    if not track then track = currentTrack end
     print("loading a file on track "..track ..": "..file)
     --get file info
     local ch, length, rate = audio.file_info(file)
@@ -190,8 +195,8 @@ function load_file(file,track)
     softcut.buffer_clear_region(track, 1, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
     softcut.buffer_read_mono(file, 0, track, lengthInS, 1, 1, 0)
-    --read samples into waveformSamples (eventually) (channel, start, duration, samples)
-    softcut.render_buffer(1,track + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1)
+    --read samples into waveformSamples (channel)
+    redraw_sample(track)
     --set start/end play positions
     softcut.loop_start(track,track + params:get('sampStart_'..track))
     softcut.loop_end(track,track + params:get('sampEnd_'..track))
@@ -210,20 +215,20 @@ function ticker()
       --if there's an event to check
       if (data[4] ~=nil) then
         --offset track playhead position by track offset
-        local localTick = clockPosition - params:get('trackTiming_'..data[3]+1)
+        local localTick = clockPosition - params:get('trackTiming_'..data[3])
         --check we're not out of bounds
-        if localTick > totalTicks then localTick = 0 - params:get('trackTiming_'..data[3]+1)
-        else if localTick < 0 then localTick = totalTicks - params:get('trackTiming_'..data[3]+1) end
+        if localTick > totalTicks then localTick = 0 - params:get('trackTiming_'..data[3])
+        else if localTick < 0 then localTick = totalTicks - params:get('trackTiming_'..data[3]) end
         end
         --finally, play an event?
-        if (localTick == math.floor(totalTicks * (data[1]))) and data[3]+1 <= tracksAmount then
+        if (localTick == math.floor(totalTicks * (data[1]))) and data[3] <= tracksAmount then
 	        --todo add option for MIDI here --
 					-- put the playhead in position (voice, position)
-    			softcut.position(data[3]+1,data[3]+1 + params:get('sampStart_'.. data[3]+1))
+    			softcut.position(data[3],data[3] + params:get('sampStart_'.. data[3]))
           --set dynamic level
-          softcut.level(data[3]+1,data[4] * 10^(params:get('trackVolume_'..data[3]+1) / 20))
+          softcut.level(data[3],data[4] * 10^(params:get('trackVolume_'..data[3]) / 20))
 					-- play from position to softcut.loop_end
-          softcut.play(data[3]+1,1)
+          softcut.play(data[3],1)
         end
       end
     end
@@ -272,9 +277,9 @@ end
 function drawEvents()
 --draws a bright box for each of the events in trackEvents, so you can see what you're doing!
   for i, data in ipairs(trackEvents) do
-    if (data[4] ~= nil and data[3] < tracksAmount) then
+    if (data[4] ~= nil and data[3] <= tracksAmount) then
       local x = editArea.border + math.floor(editArea.width * data[1])
-      local y = editArea.border + data[3] * editArea.trackHeight 
+      local y = editArea.border + (data[3] - 1) * editArea.trackHeight 
       local w = math.floor(editArea.width * data[2])
       local h = editArea.trackHeight
       local dynamic = math.floor(data[4] * 15)
@@ -303,7 +308,7 @@ function drawSequencer()
   screen.fill()
   --track sel
   screen.level(2)
-  screen.rect(editArea.border, editArea.border + editArea.trackHeight * currentTrack, editArea.width, editArea.trackHeight)
+  screen.rect(editArea.border, editArea.border + editArea.trackHeight * (currentTrack - 1), editArea.width, editArea.trackHeight)
   --time select
   screen.rect(
     editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
@@ -315,7 +320,7 @@ function drawSequencer()
   screen.level(6)
   screen.rect(
     editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
-    editArea.border + editArea.trackHeight * currentTrack,
+    editArea.border + editArea.trackHeight * (currentTrack - 1),
     (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]),
     editArea.trackHeight)
   screen.fill()
@@ -326,7 +331,7 @@ function drawSequencer()
     screen.level(15)
     screen.rect(
       editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1),
-      editArea.border + editArea.trackHeight * currentTrack,
+      editArea.border + editArea.trackHeight * (currentTrack - 1),
       (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) + 0.5,
       editArea.trackHeight + 1
     )
@@ -392,7 +397,7 @@ function drawSequencer()
 
   --what track
   screen.move(107,5)
-  screen.text("trk " .. currentTrack + 1)
+  screen.text("trk " .. currentTrack)
   
 end
 
@@ -403,10 +408,10 @@ function drawSampler()
 	screen.fill()
 	--waveform
 	screen.level(15)
-	if waveform.isLoaded[currentTrack + 1] then
+	if waveform.isLoaded[currentTrack] then
   	for i=1, editArea.width, 1 do
-  	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * 0.5)
-	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[currentTrack * editArea.width + i] * editArea.height * -0.5)
+  	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[(currentTrack) * editArea.width + i] * editArea.height * 0.5)
+	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[(currentTrack) * editArea.width + i] * editArea.height * -0.5)
 	    screen.stroke()
   	end
 	else
@@ -421,13 +426,13 @@ function drawSampler()
   screen.level(15)
 	--track label
   screen.move(107,5)
-  screen.text("trk " .. currentTrack + 1)
+  screen.text("trk " .. currentTrack)
   --"seq"
   screen.move(0,62)
   screen.text("seq")
   -- db
   screen.move(107,62)
-  screen.text(params:get('trackVolume_'..currentTrack+1)..'dB')
+  screen.text(params:get('trackVolume_'..currentTrack)..'dB')
 end
 
 function redraw()
@@ -481,7 +486,7 @@ function moveEvent(i,e,d)
 --takes event number, encoder number and turn amount, and moves events
   if (e == 1) then
   --move event to a different track
-    local movedTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+    local movedTrack = util.clamp(currentTrack + d, 1, tracksAmount)
     trackEvents[i][3] = movedTrack
     weMoved = true
   end
@@ -508,24 +513,24 @@ function enc(e, d)
     if sampleView then
       --sample view shift behaviour
       if e == 1 then
-      	params:set('trackVolume_'..currentTrack+1, params:get('trackVolume_'..currentTrack+1) + d)
+      	params:set('trackVolume_'..currentTrack, params:get('trackVolume_'..currentTrack) + d)
       end
       if e == 2 then
-        params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/1000))
-        softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
+        params:set('sampStart_'..currentTrack, params:get('sampStart_'..currentTrack) + (d/1000))
+        redraw_sample(currentTrack)
       end
       if e == 3 then
-        params:set('sampEnd_'..currentTrack+1, params:get('sampEnd_'..currentTrack+1) + (d/1000))
-        softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
+        params:set('sampEnd_'..currentTrack, params:get('sampEnd_'..currentTrack) + (d/1000))
+        redraw_sample(currentTrack)
       end
     else
       if (e == 2) then
-        params:set('trackTiming_'..currentTrack + 1, params:get('trackTiming_'..currentTrack + 1) + d)
+        params:set('trackTiming_'..currentTrack, params:get('trackTiming_'..currentTrack) + d)
         screenDirty = true
       end
       if (e == 3) then
         -- test for position, adjust note dynamic
-        local position = (beatCursor - 1) / (resolutions[segmentLength])
+        local position = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
         local length = 1 / (resolutions[segmentLength])
         currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
         for i=#trackEvents, 1, -1 do
@@ -559,15 +564,15 @@ function enc(e, d)
 
   --track select
   if (e == 1 and not heldKeys[1]) then
-    currentTrack = util.clamp(currentTrack + d, 0, tracksAmount - 1)
+    currentTrack = util.clamp(currentTrack + d, 1, tracksAmount)
     screenDirty = true
   end
   
   --cursor
   if (e == 2 and not heldKeys[1]) then
     if sampleView then
-      params:set('sampStart_'..currentTrack+1, params:get('sampStart_'..currentTrack+1) + (d/100))
-      softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)   
+      params:set('sampStart_'..currentTrack, params:get('sampStart_'..currentTrack) + (d/100))
+      redraw_sample(currentTrack) 
     else
     beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
     screenDirty = true
@@ -577,8 +582,8 @@ function enc(e, d)
   --segment Length
   if (e == 3 and not heldKeys[1] and not heldKeys[3]) then
     if sampleView then
-      params:set('sampEnd_'.. currentTrack+1, params:get('sampEnd_'.. currentTrack+1) + (d/100))
-      softcut.render_buffer(1,currentTrack+1 + params:get('sampStart_'..currentTrack+1), params:get('sampEnd_'..currentTrack+1) - params:get('sampStart_'..currentTrack+1), editArea.width + 1)
+      params:set('sampEnd_'.. currentTrack, params:get('sampEnd_'.. currentTrack) + (d/100))
+      redraw_sample(currentTrack)
     else
     local beatCursorThen = (beatCursor - 1) / resolutions[segmentLength]
     segmentLength = util.clamp(segmentLength - d, 1, #resolutions)
@@ -644,7 +649,7 @@ function key(k, z)
   -- load sample
 	if sampleView and k == 3 and z == 0 then
 	  weLoading = true
-	  print("loading a file onto track " .. currentTrack + 1)
+	  print("loading a file onto track " .. currentTrack.." with K3")
 		fileselect.enter(_path.audio,load_file)
 	end
   
