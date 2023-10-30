@@ -350,7 +350,11 @@ function drawSequencer()
     local width = (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) + 0.5
     if weFilling then
       leftEdge = editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (nowPosition[1] - 1)
-      width = ((editArea.width / beatsAmount) * (4 / resolutions[segmentLength])) * (1 + beatCursor - nowPosition[1])
+	    width = ((editArea.width / beatsAmount) * (4 / resolutions[segmentLength])) * (1 + beatCursor - nowPosition[1])
+    	if nowPosition[1] > beatCursor then
+    	  width = ((editArea.width / beatsAmount) * (4 / resolutions[segmentLength])) * (1 + fillStart - beatCursor)
+    		leftEdge = editArea.border + (editArea.width / beatsAmount) * (4 / resolutions[segmentLength]) * (beatCursor - 1)
+    	end
     end
     screen.rect(
       leftEdge,
