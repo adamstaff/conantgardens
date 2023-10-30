@@ -63,9 +63,9 @@ function init_params()
   params:add_group('sample_starts_ends', 'sample starts/ends', 12)
   -- sample start/end points
   for i=1, 6, 1 do
-  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,0.99,0.0)
+  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,9.99,0.0)
   	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, i + x) end)
-  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,1.0,1.0)
+  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,10.0,1.0)
 	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, i + x) end)
   end
   params:add_group('track_samples', 'track samples', 6)
@@ -146,6 +146,7 @@ function init()
   
   -- clear buffer
   softcut.buffer_clear()
+  softcutSampleLength = 10
   for i=1, 6, 1 do
     -- enable voices
     softcut.enable(i,1)
@@ -157,9 +158,9 @@ function init()
     softcut.pan(i,0)
     -- voices disable loop
     softcut.loop(i,0)
-    softcut.loop_start(i,i)
-    softcut.loop_end(i,i+0.99)
-    softcut.position(i,i)
+    softcut.loop_start(i, (i - 1) * softcutSampleLength)
+    softcut.loop_end(i, i * softcutSampleLength)
+    softcut.position(i,i - 1)
     -- set voices rate to 1.0 and no fade
     softcut.rate(i, params:get('trackRate_'..i))
     softcut.fade_time(i,0)
@@ -178,17 +179,17 @@ function init()
 end
 
 function copy_samples(ch, start, length, samples)
-  start = math.floor(start)
+  start = math.floor(start / 10) + 1
   for i = 1, editArea.width, 1 do
     waveform.samples[i + start * editArea.width] = samples[i]
   end
-  screenDirty = true
   waveform.isLoaded[start] = true
+  screenDirty = true
 end
 
 function redraw_sample(track)
   if track then
-    softcut.render_buffer(1, track + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1)
+    softcut.render_buffer(1, (track-1)*10 + params:get('sampStart_'..track), params:get('sampEnd_'..track) - params:get('sampStart_'..track), editArea.width + 1)
   end
 end
 
@@ -199,19 +200,19 @@ function load_file(file,track)
     local ch, length, rate = audio.file_info(file)
     --get length and limit to 1s
     local lengthInS = length * (1 / rate)
-    if lengthInS > 1 then lengthInS = 1 end
+    if lengthInS > softcutSampleLength then lengthInS = softcutSampleLength end
+    --set start/end play positions
+    params:set('sampStart_'..track, 0)
+    params:set('sampEnd_'..track, lengthInS)
     if waveform then
       waveform.length[track-1] = lengthInS
     end
     -- erase section of buffer -- required?
-    softcut.buffer_clear_region(track, 1, 0, 0)
+    softcut.buffer_clear_region((track - 1) * softcutSampleLength, softcutSampleLength, 0, 0)
     --load file into buffer (file, start_source, start_destination, duration, channel_source, channel_destination, preserve, mix)
-    softcut.buffer_read_mono(file, 0, track, lengthInS, 1, 1, 0)
+    softcut.buffer_read_mono(file, 0, (track - 1) * softcutSampleLength, lengthInS, 1, 1, 0)
     --read samples into waveformSamples (channel)
     redraw_sample(track)
-    --set start/end play positions
-    softcut.loop_start(track,track + params:get('sampStart_'..track))
-    softcut.loop_end(track,track + params:get('sampEnd_'..track))
     --update param
     params:set("sample_"..track,file,0)
   end
@@ -222,7 +223,7 @@ function play(track, level)
   if not level then level = 1.0 end
   --todo add option for MIDI here --
 	-- put the playhead in position (voice, position)
-	softcut.position(track, track + params:get('sampStart_'.. track))
+	softcut.position(track, (track - 1) * 10 + params:get('sampStart_'.. track))
   --set dynamic level
   softcut.level(track, level * 10^(params:get('trackVolume_'..track) / 20))
 	-- play from position to softcut.loop_end
@@ -428,6 +429,10 @@ function drawSequencer()
         screen.move(18, 62)
         screen.text("holding")
       end
+      if weFilling then
+        screen.move(18, 62)
+        screen.text("filling")
+      end
       --what track
       screen.move(127,5)
       screen.text_right("trk " .. currentTrack)
@@ -567,7 +572,6 @@ function enc(e, d)
       end
       if (e == 2) then
         params:set('trackTiming_'..currentTrack, params:get('trackTiming_'..currentTrack) + d)
-        screenDirty = true
       end
       if (e == 3) then
         -- test for position, adjust note dynamic
@@ -590,7 +594,6 @@ function enc(e, d)
             end
           end
         end
-        screenDirty = true
       end
     end
   end
@@ -600,13 +603,11 @@ function enc(e, d)
     for i=#movingEvents, 1, -1 do
       moveEvent(movingEvents[i],e,d)
     end
-    screenDirty = true
   end
 
   --track select
   if (e == 1 and not heldKeys[1]) then
     currentTrack = util.clamp(currentTrack + d, 1, tracksAmount)
-    screenDirty = true
   end
   
   --cursor
@@ -616,7 +617,6 @@ function enc(e, d)
       redraw_sample(currentTrack) 
     else
       beatCursor = math.floor(util.clamp(beatCursor + d, 1, resolutions[segmentLength] * beatsAmount/4))
-      screenDirty = true
     end
     if weFilling then
       weFilled = true
@@ -634,9 +634,10 @@ function enc(e, d)
 
     -- round up beatCursor
     beatCursor = math.floor(math.min(1. + beatCursorThen * resolutions[segmentLength]), resolutions[segmentLength])
-    screenDirty = true
     end
   end
+
+  screenDirty = true
 
 end
 
@@ -679,14 +680,12 @@ function key(k, z)
     if (isPlaying) then
       isPlaying = false
       clockPosition = 0
-      screenDirty = true
     else
       isPlaying = true
       clock.run(ticker)
     end
     else if (k == 2 and z == 0) then 
       sampleView = not sampleView 
-      screenDirty = true 
     end
   end
 
@@ -712,8 +711,10 @@ function key(k, z)
     weMoved = false
     weFilling = false
     weFilled = false
-    screenDirty = true
   end
+  
+  screenDirty = true
+
 end
 
 function cleanup() --------------- cleanup() is automatically called on script close
