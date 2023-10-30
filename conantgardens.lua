@@ -113,6 +113,7 @@ function init()
   weIniting = true
   currentTrack = 1
   redraw_clock_id = clock.run(redraw_clock)
+  music_clock_id = clock.run(ticker)
   editArea = {width=120, height=56, border=4}
   init_params()
   --global x and y - tracks and beats to sequence:
@@ -171,7 +172,6 @@ function init()
 	--clock stuff
   clockPosition = 0
   tick = 1
-  theClock = clock.run(ticker)
 
   weIniting = false
   screenDirty = true
@@ -231,31 +231,33 @@ function play(track, level)
 end
 
 function ticker()
-  while isPlaying do
-    --loop clock
-    if (clockPosition > totalTicks) then clockPosition = 0 end
-    --check if it's time for an event
-    local barsAmount = beatsAmount / 4
-    for i, data in ipairs(trackEvents) do
-      --if there's an event to check
-      if (data[4] ~=nil) then
-        --offset track playhead position by track offset
-        local localTick = clockPosition - params:get('trackTiming_'..data[3])
-        --check we're not out of bounds
-        if localTick > totalTicks then localTick = 0 - params:get('trackTiming_'..data[3])
-        else if localTick < 0 then localTick = totalTicks - params:get('trackTiming_'..data[3]) end
-        end
-        --finally, play an event?
-        if (localTick == math.floor(totalTicks * (data[1]) / barsAmount)) and data[3] <= tracksAmount then
-	        play(data[3], data[4])
+  while true do
+    if isPlaying then
+      --loop clock
+      if (clockPosition > totalTicks) then clockPosition = 0 end
+      --check if it's time for an event
+      local barsAmount = beatsAmount / 4
+      for i, data in ipairs(trackEvents) do
+        --if there's an event to check
+        if (data[4] ~=nil) then
+          --offset track playhead position by track offset
+          local localTick = clockPosition - params:get('trackTiming_'..data[3])
+          --check we're not out of bounds
+          if localTick > totalTicks then localTick = 0 - params:get('trackTiming_'..data[3])
+          else if localTick < 0 then localTick = totalTicks - params:get('trackTiming_'..data[3]) end
+          end
+          --finally, play an event?
+          if (localTick == math.floor(totalTicks * (data[1]) / barsAmount)) and data[3] <= tracksAmount then
+  	        play(data[3], data[4])
+          end
         end
       end
+      --tick
+      clockPosition = clockPosition + tick
+      --wait
+      if clockPosition % 16 == 0 then screenDirty = true end
     end
-    --tick
-    clockPosition = clockPosition + tick
-    --wait
-    clock.sync(1/192)
-    if clockPosition % 16 == 0 then screenDirty = true end
+  clock.sync(1/192)
   end
 end
 
@@ -682,7 +684,6 @@ function key(k, z)
       clockPosition = 0
     else
       isPlaying = true
-      clock.run(ticker)
     end
     else if (k == 2 and z == 0) then 
       sampleView = not sampleView 
@@ -718,5 +719,6 @@ function key(k, z)
 end
 
 function cleanup() --------------- cleanup() is automatically called on script close
-  clock.cancel(redraw_clock_id) -- melt our clock vie the id we noted
+  clock.cancel(redraw_clock_id) -- melt our clocks via the ids we noted
+  clock.cancel(music_clock_id)
 end
