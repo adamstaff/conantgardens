@@ -527,11 +527,13 @@ function moveEvent(i,e,d)
     local barsAmount = beatsAmount / 4
   -- move in time
     local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
+    local nudgeamount = d * length * barsAmount
     --TODO at some point, an algo for 'is there an event in the way'
+    -- if so, nudgeamount = 0
     -- will it go out of bounds?
-    if (trackEvents[i][1] + trackEvents[i][2] + (d * length * barsAmount) <= barsAmount and trackEvents[i][1] + (d * length * barsAmount) >= 0) then
+    if (trackEvents[i][1] + trackEvents[i][2] + nudgeamount <= barsAmount and trackEvents[i][1] + nudgeamount >= 0) then
       --offset position in time by the cursor length
-      trackEvents[i][1] = trackEvents[i][1] + d * length * barsAmount
+      trackEvents[i][1] = trackEvents[i][1] + nudgeamount
       weMoved = true
     end
   end
