@@ -41,7 +41,7 @@ function init_params()
   params:set_action('tracksAmount', tracksAmount_update)
   params:add_number('beatsAmount', 'number of beats', 1, 16, 8)
   params:set_action('beatsAmount', function(x) beatsAmount = x
-    totalTicks = 192*beatsAmount end )
+    totalTicks = 192*x end )
   params:add_group('track_volumes', 'track volumes', 6)
   for i=1, 6, 1 do
     params:add_number('trackVolume_'..i, 'track volume '..i, -96,6,0, function(param) return param:get() .."dB" end)
@@ -264,7 +264,7 @@ end
 
 function addRemoveEvents()
   local barFraction = beatsAmount / 4
-  local position = (beatCursor - 1) / (resolutions[segmentLength] * barFraction)
+  local position = (beatCursor - 1) / (resolutions[segmentLength] * barFraction) * barFraction
   local length = 1 / (resolutions[segmentLength] * barFraction)
   local track = currentTrack
   local foundOne = 0
@@ -276,7 +276,7 @@ function addRemoveEvents()
       if (trackEvents[i][4] ~= nil and position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
         table.remove(trackEvents[i])
         foundOne = 1
-        else if (trackEvents[i][4] ~= nil and trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
+        else if (trackEvents[i][4] ~= nil and trackEvents[i][1] >= position and trackEvents[i][1] < position + length * barFraction and currentTrack == trackEvents[i][3]) then
           table.remove(trackEvents[i])
           foundOne = 1
         end
@@ -292,10 +292,12 @@ function addRemoveEvents()
 end
 
 function drawEvents()
+  local barsAmount = beatsAmount / 4
 --draws a bright box for each of the events in trackEvents, so you can see what you're doing!
   for i, data in ipairs(trackEvents) do
+    -- check there's a note, and it's not on too high a track
     if (data[4] ~= nil and data[3] <= tracksAmount) then
-      local x = editArea.border + util.round(editArea.width * data[1], 1)
+      local x = editArea.border + util.round(editArea.width * (data[1] / barsAmount), 1)
       local y = editArea.border + (data[3] - 1) * editArea.trackHeight 
       local w = math.floor(editArea.width * data[2])
       local h = editArea.trackHeight
@@ -307,6 +309,7 @@ function drawEvents()
           screen.level(1)
         end
       end
+      --draw the event
       screen.rect(x, y, w, h)
       screen.fill() 
       -- plus a nice little line for the onset
@@ -475,15 +478,6 @@ end
 function redraw()
   screen.clear()
   
-  if weIniting then
-    --wait for proper render
-    --clock position to hold?
-    screen.clear()
-    screen.move(64, 34)
-    screen.text_center("loading...")
-    clock.run(sleeper)
-  else
-  
   if sampleView then drawSampler()
   else drawSequencer() end
   
@@ -497,7 +491,6 @@ function redraw()
     else screen.rect(0,0,4,4)
   end
   --else end
-  end
   screen.fill()
 
   screen.update()
@@ -507,17 +500,11 @@ end
 function redraw_clock() ----- a clock that draws space
   while true do ------------- "while true do" means "do this forever"
     clock.sleep(1/15) ------- pause for a fifteenth of a second (aka 15fps)
-    if screenDirty and not weLoading then ---- only if something changed
+    if screenDirty --[[and not weLoading]] then ---- only if something changed
       redraw() -------------- redraw space
-      screen_dirty = false -- and everything is clean again
+      screenDirty = false -- and everything is clean again
     end
   end
-end
-
-function sleeper(i)
-  if not i then i = 1 end
-  clock.sleep(i)
-  weIniting = false
 end
 
 function moveEvent(i,e,d)
@@ -529,31 +516,31 @@ function moveEvent(i,e,d)
     weMoved = true
   end
   if (e == 2) then
+    local barsAmount = beatsAmount / 4
   -- move in time
     local length = 1 / (resolutions[segmentLength] * beatsAmount / 4)
-    --at some point,an algo for 'is there an event in the way'
+    --TODO at some point, an algo for 'is there an event in the way'
     -- will it go out of bounds?
-    if (trackEvents[i][1] + trackEvents[i][2] + d * length <= 1 and trackEvents[i][1] + d * length >= 0) then
+    if (trackEvents[i][1] + trackEvents[i][2] + (d * length * barsAmount) <= barsAmount and trackEvents[i][1] + (d * length * barsAmount) >= 0) then
       --offset position in time by the cursor length
-      trackEvents[i][1] = trackEvents[i][1] + d * length
+      trackEvents[i][1] = trackEvents[i][1] + d * length * barsAmount
       weMoved = true
     end
   end
 end
 
 function doFill(s,e)
+  local barsAmount = beatsAmount / 4
   if s>e then
     local tempS = s
-    print(tempS)
-    print("swapping s and e")
     s = e
     e = tempS
   end
   s=s-1
   e=e-1
-  lengthD = 1 / (resolutions[segmentLength] * (beatsAmount / 4))
+  lengthD = 1 / (resolutions[segmentLength] * barsAmount)
   for i = s, e, 1 do
-    table.insert(trackEvents, {lengthD * i, lengthD, currentTrack, currentDynamic})
+    table.insert(trackEvents, {lengthD * barsAmount * i, lengthD, currentTrack, currentDynamic})
   end
   screenDirty = true
 end
@@ -661,10 +648,11 @@ function key(k, z)
     --store initial position to check that we actually move something. Because if we don't, we'll add/remove an event
     nowPosition[1] = beatCursor
     nowPosition[2] = currentTrack
+    local barsAmount = beatsAmount / 4
 
     --store decimal values for the cursor start/end (event positions are stored decimally)
-    local selectposition = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
-    local selectlength = 1 / (resolutions[segmentLength] * (beatsAmount / 4)) - (1/192)
+    local selectposition = ((beatCursor - 1) / (resolutions[segmentLength] * barsAmount)) * barsAmount
+    local selectlength = barsAmount / (resolutions[segmentLength] * barsAmount) - (1/192)
     if selectlength < 1/192 then selectlength = 1/192 end
 
     --look through all the track events to see whether each one is under the cursor, and add the event index to a table if so
@@ -723,6 +711,7 @@ function key(k, z)
     weMoved = false
     weFilling = false
     weFilled = false
+    screenDirty = true
   end
 end
 
