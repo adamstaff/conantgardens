@@ -234,6 +234,7 @@ function ticker()
     --loop clock
     if (clockPosition > totalTicks) then clockPosition = 0 end
     --check if it's time for an event
+    local barsAmount = beatsAmount / 4
     for i, data in ipairs(trackEvents) do
       --if there's an event to check
       if (data[4] ~=nil) then
@@ -244,7 +245,7 @@ function ticker()
         else if localTick < 0 then localTick = totalTicks - params:get('trackTiming_'..data[3]) end
         end
         --finally, play an event?
-        if (localTick == math.floor(totalTicks * (data[1]))) and data[3] <= tracksAmount then
+        if (localTick == math.floor(totalTicks * (data[1]) / barsAmount)) and data[3] <= tracksAmount then
 	        play(data[3], data[4])
         end
       end
@@ -500,7 +501,7 @@ end
 function redraw_clock() ----- a clock that draws space
   while true do ------------- "while true do" means "do this forever"
     clock.sleep(1/15) ------- pause for a fifteenth of a second (aka 15fps)
-    if screenDirty --[[and not weLoading]] then ---- only if something changed
+    if screenDirty and not weLoading then ---- only if something changed
       redraw() -------------- redraw space
       screenDirty = false -- and everything is clean again
     end
