@@ -63,10 +63,10 @@ function init_params()
   params:add_group('sample_starts_ends', 'sample starts/ends', 12)
   -- sample start/end points
   for i=1, 6, 1 do
-  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,9.99,0.0)
-  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, i + x) end)
-  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,10.0,1.0)
-	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, i + x) end)
+  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,10.0,0.0)
+  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, (i-1) * softcutSampleLength + x) end)
+  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,10.1,1.0)
+	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, (i-1) * softcutSampleLength + x) end)
   end
   params:add_group('track_samples', 'track samples', 6)
   -- sample file locations
@@ -115,6 +115,7 @@ function init()
   redraw_clock_id = clock.run(redraw_clock)
   music_clock_id = clock.run(ticker)
   editArea = {width=120, height=56, border=4}
+  softcutSampleLength = 10
   init_params()
   --global x and y - tracks and beats to sequence:
   editArea.trackHeight = editArea.height / params:get('tracksAmount')
@@ -147,7 +148,6 @@ function init()
   
   -- clear buffer
   softcut.buffer_clear()
-  softcutSampleLength = 10
   for i=1, 6, 1 do
     -- enable voices
     softcut.enable(i,1)
@@ -223,7 +223,7 @@ function play(track, level)
   if not level then level = 1.0 end
   --todo add option for MIDI here --
 	-- put the playhead in position (voice, position)
-	softcut.position(track, (track - 1) * 10 + params:get('sampStart_'.. track))
+	softcut.position(track, (track - 1) * softcutSampleLength + params:get('sampStart_'.. track))
   --set dynamic level
   softcut.level(track, level * 10^(params:get('trackVolume_'..track) / 20))
 	-- play from position to softcut.loop_end
