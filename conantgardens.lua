@@ -269,7 +269,7 @@ end
 function addRemoveEvents()
   local barFraction = beatsAmount / 4
   local position = (beatCursor - 1) / (resolutions[segmentLength] * barFraction) * barFraction
-  local length = 1 / (resolutions[segmentLength] * barFraction)
+  local length = 1 / (resolutions[segmentLength] * barFraction) * barFraction
   local track = currentTrack
   local foundOne = 0
 
@@ -303,7 +303,7 @@ function drawEvents()
     if (data[4] ~= nil and data[3] <= tracksAmount) then
       local x = editArea.border + util.round(editArea.width * (data[1] / barsAmount), 1)
       local y = editArea.border + (data[3] - 1) * editArea.trackHeight 
-      local w = math.floor(editArea.width * data[2])
+      local w = math.floor((editArea.width * data[2]) / barsAmount)
       local h = editArea.trackHeight
       local dynamic = math.floor(data[4] * 15)
       screen.level(dynamic)
