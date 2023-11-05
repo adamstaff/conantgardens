@@ -579,22 +579,17 @@ function enc(e, d)
       end
       if (e == 3) then
         -- test for position, adjust note dynamic
-        local position = (beatCursor - 1) / (resolutions[segmentLength] * (beatsAmount / 4))
+        local position = ((beatCursor - 1) / (resolutions[segmentLength] * beatsAmount / 4)) * beatsAmount / 4
         local length = 1 / (resolutions[segmentLength])
         currentDynamic = util.clamp(currentDynamic + d/50, 0.1, 1.0)
         for i=#trackEvents, 1, -1 do
         --is event under cursor?
           if trackEvents[i][4] ~= nil then
-            if currentTrack == trackEvents[i][3] then
-              if (position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2]) then
-                --yes
-                currentDynamic = trackEvents[i][4]
-                trackEvents[i][4] = util.clamp(currentDynamic + d/10, 0.1, 1.0)
-              else if (trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
+            local eventEnd = trackEvents[i][1] + trackEvents[i][2]
+            if (currentTrack == trackEvents[i][3] and position < eventEnd and position >= trackEvents[i][1]) 
+            or (currentTrack == trackEvents[i][3] and trackEvents[i][1] >= position and trackEvents[i][1] < position + length) then
                 currentDynamic = trackEvents[i][4]
                 trackEvents[i][4] = util.clamp(currentDynamic + d/50, 0.1, 1.0)
-              end
-              end
             end
           end
         end
