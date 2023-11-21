@@ -60,14 +60,6 @@ function init_params()
   for i=1, 6, 1 do
     params:add_number('trackTiming_'..i, 'track timing '..i)
   end
-  params:add_group('sample_starts_ends', 'sample starts/ends', 12)
-  -- sample start/end points
-  for i=1, 6, 1 do
-  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,10.0,0.0)
-  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, (i-1) * softcutSampleLength + x) end)
-  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,10.1,1.0)
-	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, (i-1) * softcutSampleLength + x) end)
-  end
   params:add_group('track_samples', 'track samples', 6)
   -- sample file locations
   for i=1, 6, 1 do
@@ -84,6 +76,14 @@ function init_params()
         end
       end
     }
+  end
+  params:add_group('sample_starts_ends', 'sample starts/ends', 12)
+  -- sample start/end points
+  for i=1, 6, 1 do
+  	params:add_number('sampStart_'..i, 'sample '..i..' start', 0.0,10.0,0.0)
+  	params:set_action('sampStart_'.. i, function(x) softcut.loop_start(i, (i-1) * softcutSampleLength + x) end)
+  	params:add_number('sampEnd_'..i, 'sample '..i..' end',0.0,10.1,1.0)
+	  params:set_action('sampEnd_'.. i, function(x) softcut.loop_end(i, (i-1) * softcutSampleLength + x) end)
   end
 
   -- here, we set our PSET callbacks for save / load:
@@ -175,7 +175,6 @@ function init()
 
   weIniting = false
   screenDirty = true
-
 end
 
 function copy_samples(ch, start, length, samples)
@@ -255,7 +254,7 @@ function ticker()
       --tick
       clockPosition = clockPosition + tick
       --wait
-      if clockPosition % 16 == 0 then screenDirty = true end
+      if clockPosition % 4 == 0 then screenDirty = true end
     end
   clock.sync(1/192)
   end
@@ -371,8 +370,9 @@ function drawSequencer()
     )
     screen.stroke()
   end
+  screen.aa(0)
   --play head line, position updated by and taken from ticker() 
-  local playheadX = editArea.border + (clockPosition / totalTicks) * editArea.width
+  local playheadX = editArea.border + util.round((clockPosition / totalTicks) * editArea.width, 1)
   screen.level(15)
   screen.move(playheadX, 0)
   screen.line(playheadX, editArea.border)
@@ -385,7 +385,7 @@ function drawSequencer()
     screen.line(playheadX - params:get('trackTiming_'..i) / 12, editArea.border + editArea.trackHeight * (i))
   end
   screen.stroke()
-  
+  screen.aa(0)
   --guides, little dots to demarcate bar lines and track lines
   screen.level(0)
   for beat=0, beatsAmount, 1 do
@@ -450,7 +450,7 @@ function drawSampler()
 	--waveform
 	screen.level(15)
 	if waveform.isLoaded[currentTrack] then
-  	for i=1, editArea.width, 1 do
+  	for i=1, editArea.width - 1, 1 do
   	  screen.move(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[(currentTrack) * editArea.width + i] * editArea.height * 0.5)
 	    screen.line(i+editArea.border, editArea.border  + editArea.height * 0.5 + waveform.samples[(currentTrack) * editArea.width + i] * editArea.height * -0.5)
 	    screen.stroke()
@@ -507,7 +507,7 @@ end
 
 function redraw_clock() ----- a clock that draws space
   while true do ------------- "while true do" means "do this forever"
-    clock.sleep(1/15) ------- pause for a fifteenth of a second (aka 15fps)
+    clock.sleep(1/60) ------- pause for a fifteenth of a second (aka 15fps)
     if screenDirty and not weLoading then ---- only if something changed
       redraw() -------------- redraw space
       screenDirty = false -- and everything is clean again
