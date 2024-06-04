@@ -221,7 +221,7 @@ end
 function play(track, level)
   if not level then level = 1.0 end
   --todo add option for MIDI here --
-	-- put the playhead in position (voice, position)
+	-- put the softcut playhead in position (voice, position)
 	softcut.position(track, (track - 1) * softcutSampleLength + params:get('sampStart_'.. track))
   --set dynamic level
   softcut.level(track, level * 10^(params:get('trackVolume_'..track) / 20))
@@ -266,20 +266,25 @@ function tracksAmount_update(new)
 end
 
 function addRemoveEvents()
+  -- generate local values:
   local barFraction = beatsAmount / 4
+  -- the left edge of the cursor
   local position = (beatCursor - 1) / (resolutions[segmentLength] * barFraction) * barFraction
+  -- the length of the cursor
   local length = 1 / (resolutions[segmentLength] * barFraction) * barFraction
   local track = currentTrack
   local foundOne = 0
-
+  
   --check for clashes, and delete event
   -- structure: [position, length, track, dynamic] 
   if #trackEvents > 0 then
     for i=#trackEvents, 1, -1 do
+	  -- check if the start of the cursor is inside the event
       if (trackEvents[i][4] ~= nil and position >= trackEvents[i][1] and position < trackEvents[i][1] + trackEvents[i][2] and currentTrack == trackEvents[i][3]) then
         table.remove(trackEvents[i])
         foundOne = 1
-        else if (trackEvents[i][4] ~= nil and trackEvents[i][1] >= position and trackEvents[i][1] < position + length * barFraction and currentTrack == trackEvents[i][3]) then
+        -- check if the end of the cursor is inside the event
+        else if (trackEvents[i][4] ~= nil and trackEvents[i][1] >= position and trackEvents[i][1] < position + length and currentTrack == trackEvents[i][3]) then
           table.remove(trackEvents[i])
           foundOne = 1
         end
